@@ -78,7 +78,7 @@ class MarketMonitor:
                     volume_ratio=round(volume_ratio, 2),
                     index_code=stock.index_code,
                     timestamp=stock.timestamp.isoformat(),
-                    reason=f"VolRatio:{volume_ratio:.1f}|Amt:{stock.amount/10000:.0f}W|Chg:{stock.pct_chg}%"
+                    reason=f"量比:{volume_ratio:.1f}|金额:{stock.amount/10000:.0f}万|涨幅:{stock.pct_chg}%"
                 )
                 alerts.append(alert)
                 self._publish_alert(alert)

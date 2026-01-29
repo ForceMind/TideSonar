@@ -4,10 +4,10 @@
     <header class="h-12 bg-gray-800 border-b border-gray-700 flex items-center px-4 justify-between select-none">
       <div class="flex items-center space-x-2">
         <div class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
-        <h1 class="text-xl font-bold tracking-tight text-white">GuanChao <span class="text-blue-500 font-light">TideSonar</span></h1>
+        <h1 class="text-xl font-bold tracking-tight text-white">观潮 <span class="text-blue-500 font-light">TideSonar</span></h1>
       </div>
       <div class="text-xs text-gray-500 font-mono">
-        Status: <span :class="wsStatusClass">{{ wsStatusText }}</span> | Alerts: {{ totalAlerts }}
+        状态: <span :class="wsStatusClass">{{ wsStatusText }}</span> | 捕捉异动数: {{ totalAlerts }}
       </div>
     </header>
 
@@ -17,7 +17,7 @@
       <!-- Column 1: HS300 -->
       <div class="flex-1 flex flex-col min-w-0">
         <div class="h-10 bg-gray-800/80 backdrop-blur border-b border-gray-700 flex items-center justify-center">
-            <h2 class="font-bold text-gray-200">沪深300 <span class="text-xs text-gray-500 font-normal">Core Actions</span></h2>
+            <h2 class="font-bold text-gray-200">沪深300 <span class="text-xs text-gray-500 font-normal">核心资产</span></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">
             <StockCard v-for="item in lists.HS300" :key="item.id" :data="item" />
@@ -27,7 +27,7 @@
       <!-- Column 2: ZZ500 -->
       <div class="flex-1 flex flex-col min-w-0">
         <div class="h-10 bg-gray-800/80 backdrop-blur border-b border-gray-700 flex items-center justify-center">
-            <h2 class="font-bold text-gray-200">中证500 <span class="text-xs text-gray-500 font-normal">Growth</span></h2>
+            <h2 class="font-bold text-gray-200">中证500 <span class="text-xs text-gray-500 font-normal">中盘成长</span></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">
             <StockCard v-for="item in lists.ZZ500" :key="item.id" :data="item" />
@@ -37,7 +37,7 @@
       <!-- Column 3: ZZ1000 -->
       <div class="flex-1 flex flex-col min-w-0">
         <div class="h-10 bg-gray-800/80 backdrop-blur border-b border-gray-700 flex items-center justify-center">
-            <h2 class="font-bold text-gray-200">中证1000 <span class="text-xs text-gray-500 font-normal">Active</span></h2>
+            <h2 class="font-bold text-gray-200">中证1000 <span class="text-xs text-gray-500 font-normal">中小活跃</span></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">
             <StockCard v-for="item in lists.ZZ1000" :key="item.id" :data="item" />
@@ -47,7 +47,7 @@
       <!-- Column 4: ZZ2000 -->
       <div class="flex-1 flex flex-col min-w-0">
         <div class="h-10 bg-gray-800/80 backdrop-blur border-b border-gray-700 flex items-center justify-center">
-            <h2 class="font-bold text-gray-200">中证2000 <span class="text-xs text-gray-500 font-normal">Speculative</span></h2>
+            <h2 class="font-bold text-gray-200">中证2000 <span class="text-xs text-gray-500 font-normal">微盘投机</span></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">
              <StockCard v-for="item in lists.ZZ2000" :key="item.id" :data="item" />
@@ -77,7 +77,7 @@ let socket = null;
 // Helpers
 const MAX_ITEMS_PER_COLUMN = 50;
 
-const wsStatusText = computed(() => isConnected.value ? 'Live' : 'Disconnected');
+const wsStatusText = computed(() => isConnected.value ? '已连接' : '已断开');
 const wsStatusClass = computed(() => isConnected.value ? 'text-green-500' : 'text-red-500');
 
 // WebSocket Logic

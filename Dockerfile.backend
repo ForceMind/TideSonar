@@ -1,0 +1,18 @@
+# Backend Dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install Deps
+COPY ./backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy Code
+# We copy the 'backend' folder into /app/backend so structure is preserved
+COPY ./backend /app/backend
+
+# Set Path
+ENV PYTHONPATH=/app
+
+# Run
+CMD ["python", "-m", "backend.app.main"]

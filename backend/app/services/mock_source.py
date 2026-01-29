@@ -38,7 +38,8 @@ class MockDataSource(BaseDataSource):
             change_factor = random.gauss(0, 0.02) # Normal distribution centered at 0
             
             # Occasionally inject an anomaly (Fat Tail)
-            if random.random() < 0.005: # 0.5% chance of anomaly
+            # Reduced probability from 0.005 to 0.001 to reduce UI flickering (approx 4 alerts per tick)
+            if random.random() < 0.001: 
                 change_factor = random.choice([random.uniform(0.015, 0.05), random.uniform(-0.05, -0.015)])
                 
             current_price = round(meta["base_price"] * (1 + change_factor), 2)

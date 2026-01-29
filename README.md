@@ -1,66 +1,68 @@
-# GuanChao (TideSonar) - A-Share Capital Flow Monitor
+# GuanChao 观潮 (TideSonar) - A股实时资金流向监控系统
 
-A real-time anomaly detection system for A-Share market, focusing on identifying "High Volume" events across major indices (HS300, ZZ500, ZZ1000, ZZ2000).
+这是一个针对 A股市场（沪深300、中证500/1000/2000）的实时异动监控系统，旨在捕捉主力资金的“成交额放大”动作。
 
-## 1. Project Structure
+## 1. 项目结构
 
 ```
 TideSonar/
-├── backend/                 # Python FastAPI Backend
+├── backend/                 # Python FastAPI 后端
 │   ├── app/
-│   │   ├── api/             # API Endpoints (WebSocket)
-│   │   ├── core/            # Config & Interfaces
-│   │   ├── models/          # Data Models (Pydantic)
-│   │   ├── services/        # Business Logic (Monitor, MockSource, Redis)
-│   │   └── main.py          # Entry Point
+│   │   ├── api/             # API 接口 (WebSocket)
+│   │   ├── core/            # 核心配置与接口定义
+│   │   ├── models/          # 数据模型 (Pydantic)
+│   │   ├── services/        # 业务逻辑 (监控引擎, Mock数据源, Redis监听)
+│   │   └── main.py          # 启动入口
 │   └── requirements.txt
 │
-├── frontend/                # Vue 3 + Tailwind Frontend
+├── frontend/                # Vue 3 + Tailwind 前端
 │   ├── src/
-│   │   ├── components/      # UI Components (StockCard)
-│   │   └── App.vue          # Main Layout (4 Columns)
+│   │   ├── components/      # UI 组件 (卡片)
+│   │   └── App.vue          # 主布局 (四列瀑布流)
 │   └── ...
 ```
 
-## 2. Prerequisites
+## 2. 环境要求
 
-- **Python 3.10+**
-- **Node.js 16+**
-- **Redis** (Optional but recommended. System falls back to in-memory mode if missing.)
+- **Python 3.10+** (后端)
+- **Node.js 16+** (前端)
+- **Redis** (可选/推荐)。如果没有 Redis，系统会自动切换到“内存直连模式”，方便本地开发。
 
-## 3. How to Run
+## 3. 常见问题 (FAQ)
 
-### Backend (Server)
-1. Open terminal 1.
-2. Navigate to root `TideSonar/`
-3. Set PYTHONPATH and run:
-   ```powershell
-   $env:PYTHONPATH="e:\Privy\TideSonar"; python -m backend.app.main
-   ```
-   *The server will start at `http://localhost:8000` and begin generating mock alerts.*
+**Q: 现在的行情数据是哪来的？**
+A: 目前使用的是 `MockDataSource` (后端内置的模拟器)。它每隔 3 秒生成全市场 4000+ 只股票的随机涨跌和成交量数据，用于验证监控算法和前端界面。
 
-### Frontend (UI)
-1. Open terminal 2.
-2. Navigate to `TideSonar/frontend`
-3. Install dependencies (first time only):
-   ```bash
-   npm install
-   ```
-4. Run dev server:
-   ```bash
-   npm run dev
-   ```
-5. Open browser at `http://localhost:3000` (or the port shown/assigned by Vite).
+**Q: 为什么界面有时候会闪烁？**
+A: 因为这是**实时流 (Real-time Stream)**。
+1. **Mock 频率高**: 为了演示效果，模拟数据生成各种“异动”的概率较高，导致瞬间推送大量卡片。
+2. **入场动画**: 每个新卡片出现时都有下压动画。如果 1秒内来了 10个新卡片，列表就会频繁重排。
+   *(注: 我已在最新代码中降低了 Mock 异动概率，闪烁感应已大幅减轻)*
 
-## 4. Customization (Switching to Real Data)
+**Q: 如何接入真实数据？**
+A: 修改 `backend/app/services/producer_task.py`，将 `MockDataSource` 替换为您自己的数据源类（需继承 `BaseDataSource` 并实现 `get_snapshot` 接口）。参考 `real_source_example.py`。
 
-To use real market data:
-1. Open `backend/app/services/producer_task.py`.
-2. Replace `MockDataSource` with your own implementation of `BaseDataSource`.
-3. An example implementation structure is provided in `backend/app/services/real_source_example.py`.
+## 4. 快速启动
 
-## 5. Deployment
+提供了多种启动方式，请根据您的环境选择。
 
-- Backend: Use `gunicorn` with `uvicorn` workers behind Nginx.
-- Frontend: Run `npm run build` and serve the `dist/` folder via Nginx.
-- Redis: Ensure persistence is enabled if you want to save alert history (not currently implemented, but prepared for).
+### 方式 A: Windows 本地开发 (推荐)
+双击运行 `scripts/start_win.bat` 即可同时启动前后端。
+
+### 方式 B: Linux 服务器部署 (Docker 推荐)
+需要安装 Docker 和 Docker Compose。
+```bash
+chmod +x scripts/deploy_server.sh
+./scripts/deploy_server.sh
+```
+
+### 方式 C: 手动启动
+**后端:**
+```powershell
+$env:PYTHONPATH="e:\Privy\TideSonar"; python -m backend.app.main
+```
+**前端:**
+```bash
+cd frontend
+npm run dev
+```
