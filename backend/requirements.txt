@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+redis
+pandas
+numpy
+pydantic
+pydantic-settings
+websockets
