@@ -18,8 +18,10 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - BACKEND_PORT=8000
+      - BIYING_LICENSE=${BIYING_LICENSE}
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     depends_on:
       - redis
     restart: always
@@ -30,6 +32,8 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     container_name: tidesonar-frontend
+    environment:
+      - VITE_BACKEND_HOST=${SERVER_IP}:${BACKEND_PORT:-8000}
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT:-3000}:80"
     restart: always

@@ -29,7 +29,21 @@ if ! command_exists docker-compose; then
     fi
 fi
 
-# 3. Build and Run
+# 3. Data Source Configuration
+echo ""
+echo "🔐 Security Configuration"
+echo "Please enter your Biying API License Key (Leave empty to use Mock Data/Env):"
+read -r INPUT_LICENSE
+
+if [ -z "$INPUT_LICENSE" ]; then
+    echo "⚠️  No license provided. System will default to MOCK DATA or .env setting."
+else
+    echo "✅ License key captured for this session."
+    export BIYING_LICENSE="$INPUT_LICENSE"
+fi
+echo ""
+
+# 4. Build and Run
 echo "🚀 Building and Starting Services..."
 
 # Adapt to older docker-compose or new docker compose

@@ -6,3 +6,4 @@ numpy
 pydantic
 pydantic-settings
 websockets
+requests

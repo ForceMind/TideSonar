@@ -82,9 +82,25 @@ const wsStatusClass = computed(() => isConnected.value ? 'text-green-500' : 'tex
 
 // WebSocket Logic
 const connectWebSocket = () => {
-    // Determine backend URL (assume localhost:8000 for now, can be configured)
+    // Determine backend URL
+    // Development: localhost:8000
+    // Production: relative path or env var
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `ws://localhost:8000/ws/alerts`;
+    
+    // Check if we have an explicit backend URL in env, otherwise derive or default
+    let wsHost = import.meta.env.VITE_BACKEND_HOST || 'localhost:8000';
+    
+    // If running on same domain in prod (e.g. via Nginx reverse proxy /api/ws)
+    // We might need to adjust logic. 
+    // For now, simple env var is best for docker flexibility.
+    
+    // If VITE_BACKEND_HOST is not set and we are in production, assume same host
+    if (!import.meta.env.VITE_BACKEND_HOST && import.meta.env.PROD) {
+        wsHost = window.location.host; // Use current window host
+    }
+
+    const wsUrl = `${protocol}//${wsHost}/ws/alerts`;
+    console.log("Connecting WS to:", wsUrl);
 
     socket = new WebSocket(wsUrl);
 

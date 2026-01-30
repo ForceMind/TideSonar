@@ -48,4 +48,11 @@ def read_root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=True)
+    import os
+    from backend.app.core.config import settings
+    
+    # Allow Port override via Env Var (e.g. for Server deployment)
+    port = int(os.getenv("BACKEND_PORT", settings.BACKEND_PORT))
+    logger.info(f"Starting Backend on Port {port}")
+    
+    uvicorn.run("backend.app.main:app", host="0.0.0.0", port=port, reload=True)

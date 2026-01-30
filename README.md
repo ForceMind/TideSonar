@@ -46,6 +46,16 @@ A: 修改 `backend/app/services/producer_task.py`，将 `MockDataSource` 替换�
 
 提供了多种启动方式，请根据您的环境选择。
 
+### 配置 (Configuration)
+在项目根目录创建或修改 `.env` 文件来配置端口和 API Key：
+```ini
+BIYING_LICENSE=您的必盈License
+SERVER_IP=您的服务器IP或域名
+FRONTEND_PORT=3000
+BACKEND_PORT=8000
+```
+*(如果没有 License，请保留默认值，系统将自动使用 Mock 模拟数据)*
+
 ### 方式 A: Windows 本地开发 (推荐)
 双击运行 `scripts/start_win.bat` 即可同时启动前后端。
 
