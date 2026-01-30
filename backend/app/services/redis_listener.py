@@ -27,6 +27,10 @@ async def redis_listener():
                     await manager.broadcast(data)
                     
     except Exception as e:
+        # Suppress verbose connection errors for local/standalone mode
+        if "Connect call failed" in str(e) or "10061" in str(e):
+             logger.warning("Redis not available (Standalone Mode). Listener disabled.")
+             return # Exit the listener task, do not retry loop
+        
         logger.error(f"Redis Listener Error: {e}")
-        # Retry logic could go here, but for now we just log
         await asyncio.sleep(5)

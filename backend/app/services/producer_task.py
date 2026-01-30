@@ -35,14 +35,14 @@ async def run_mock_producer():
     try:
         while True:
             # 1. Get Data
-            # source.get_real_time_data handles the batching logic internally
+            # source.get_real_time_data is blocking (requests), so run in thread to avoid freezing loop
             if hasattr(source, 'get_real_time_data'):
-                 snapshot = source.get_real_time_data()
+                 snapshot = await asyncio.to_thread(source.get_real_time_data)
             else:
-                 snapshot = source.get_snapshot() # Fallback for Mock source
+                 snapshot = await asyncio.to_thread(source.get_snapshot)
             
             # 2. Process
-            # Note: detect_anomalies is synchronous (CPU bound). 
+            # detect_anomalies is also CPU bound
             # In high-perf, run in threadpool. For mock, direct call is acceptable or use to_thread.
             alerts = await asyncio.to_thread(monitor.detect_anomalies, snapshot)
             
@@ -51,8 +51,20 @@ async def run_mock_producer():
                 
                 # FALLBACK: If Redis is down, inject directly to WS Manager so frontend works
                 if not redis_available:
+                     # Optimization: Sending 2000 messages individually will crash the browser/network loop.
+                     # Broadcst only top 50 alerts or switch to sending a list if frontend supports it.
+                     # For now, let's limit to top 50 to see if it fixes "frontend empty"
+                     
+                    limit = 50
+                    count = 0 
                     for alert in alerts:
                         await manager.broadcast(alert.model_dump_json())
+                        count += 1
+                        if count >= limit:
+                             break
+                    
+                    if len(alerts) > limit:
+                        logger.info(f"   (Broadcasted top {limit} alerts to frontend)")
             
             # 3. Frequency
             await asyncio.sleep(poll_interval)

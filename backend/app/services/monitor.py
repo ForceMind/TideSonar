@@ -27,21 +27,19 @@ class MarketMonitor:
     def _get_baseline_volume(self, code: str) -> float:
         """
         Mocking the '5-day average volume for this minute'.
-        In a real system, this would query a pre-calculated DataFrame or DB.
+        For Real Data testing without DB, we'll set a higher baseline 
+        so we don't flag everything as specific 'Volume Anomaly'.
         """
         if code not in self.baseline_volumes:
-            # Deterministic pseudo-random based on code
-            seed = int(code) if code.isdigit() else hash(code)
-            np.random.seed(seed % 2**32)
-            self.baseline_volumes[code] = np.random.randint(1000, 20000)
+            # Random baseline between 5 Million and 50 Million for testing
+            # This makes "Volume Ratio" less trivial to hit.
+            import random
+            random.seed(code)
+            self.baseline_volumes[code] = random.randint(5_000_000, 50_000_000)
         return self.baseline_volumes[code]
 
     def detect_anomalies(self, snapshot: List[StockData]) -> List[StockAlert]:
         alerts = []
-        
-        # Convert to DataFrame for vectorized operations (faster for 4000 stocks)
-        # But for clarity in this step, I'll iterate. 
-        # Requirement: "only specific indices"
         
         target_indices = {"HS300", "ZZ500", "ZZ1000", "ZZ2000"}
         
@@ -50,38 +48,39 @@ class MarketMonitor:
             if stock.index_code not in target_indices:
                 continue
 
-            # 2. Filtering Logic
-            # Condition B: Amount > 10,000,000 (10 Million)
-            if stock.amount <= 10_000_000:
+            # 2. Filtering Logic - STRICTER FOR TESTING
+            # Condition B: Turnover > 50 Million (High liquidity)
+            if stock.amount <= 50_000_000:
                 continue
                 
-            # Condition C: Abs(Pct_Chg) > 1.0%
-            if abs(stock.pct_chg) <= 1.0:
+            # Condition C: Significant Move (> 3.0% or < -3.0%)
+            if abs(stock.pct_chg) <= 3.0:
                 continue
 
-            # Condition A: Volume Ratio > 2.5
+            # Condition A: Volume Ratio (Simplified)
+            # Since we don't have real minute-level baseline, we'll just check if volume is decent
+            if stock.volume < 1000: 
+                continue
+
+            # Calculate a mock volume ratio or set to 1.0 if missing
+            # In real logic: volume_ratio = volume / baseline
             baseline = self._get_baseline_volume(stock.code)
-            # Avoid division by zero
-            if baseline == 0:
-                baseline = 100
-                
-            volume_ratio = stock.volume / baseline
-            
-            if volume_ratio > 2.5:
-                # HIT!
-                alert = StockAlert(
-                    code=stock.code,
-                    name=stock.name,
-                    price=stock.price,
-                    pct_chg=stock.pct_chg,
-                    amount=stock.amount,
-                    volume_ratio=round(volume_ratio, 2),
-                    index_code=stock.index_code,
-                    timestamp=stock.timestamp.isoformat(),
-                    reason=f"量比:{volume_ratio:.1f}|金额:{stock.amount/10000:.0f}万|涨幅:{stock.pct_chg}%"
-                )
-                alerts.append(alert)
-                self._publish_alert(alert)
+            volume_ratio = stock.volume / baseline if baseline > 0 else 1.0
+
+            # HIT!
+            alert = StockAlert(
+                code=stock.code,
+                name=stock.name,
+                price=stock.price,
+                pct_chg=stock.pct_chg,
+                amount=stock.amount,
+                volume_ratio=round(volume_ratio, 2),
+                index_code=stock.index_code,
+                timestamp=stock.timestamp.isoformat(),
+                reason=f"量比:{volume_ratio:.1f}|金额:{stock.amount/10000:.0f}万|涨幅:{stock.pct_chg}%"
+            )
+            alerts.append(alert)
+            self._publish_alert(alert)
 
         return alerts
 

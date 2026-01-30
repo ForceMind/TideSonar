@@ -120,8 +120,10 @@ class BiyingDataSource(BaseDataSource):
                 for item in stocks_list:
                     # 'dm' is code (daima)
                     code = item.get('dm', '')
+                    # Clean the code: Remove .SH, .SZ, or other suffixes just in case
                     if code:
-                        mapping[code] = internal_name
+                        clean_code = code.split('.')[0]
+                        mapping[clean_code] = internal_name
                         count += 1
                 logger.info(f"   -> Loaded {count} stocks for {internal_name}")
                 
@@ -158,21 +160,25 @@ class BiyingDataSource(BaseDataSource):
         first_batch = True
         
         # Use session for existing TCP connection reuse
-        if not hasattr(self, 'session'):
-            self.session = requests.Session()
+        # if not hasattr(self, 'session'):
+        #     self.session = requests.Session()
+        #     self.session.headers.update({
+        #         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        #     })
 
         batch_count = 0
-        total_batches = (len(all_codes) + 19) // 20
+        BATCH_SIZE = 15 # Reduced from 20 to be safer
+        total_batches = (len(all_codes) + BATCH_SIZE - 1) // BATCH_SIZE
         
-        for batch in chunker(all_codes, 20):
+        for batch in chunker(all_codes, BATCH_SIZE):
             batch_count += 1
             codes_str = ",".join(batch)
             url = f"http://api.biyingapi.com/hsrl/ssjy_more/{self.license}"
             params = {"stock_codes": codes_str}
 
             try:
-                # Use session for existing TCP connection reuse
-                resp = self.session.get(url, params=params, timeout=5)
+                # Use simple requests.get to match working test scripts (avoid Session/Cookie issues)
+                resp = requests.get(url, params=params, timeout=5)
 
                 if resp.status_code == 200:
                     data_list = resp.json()
@@ -230,3 +236,5 @@ class BiyingDataSource(BaseDataSource):
             # Optional: Log progress every 50 batches
             if batch_count % 50 == 0:
                 logger.info(f"   Fetched {batch_count}/{total_batches} batches...")
+
+        return result
