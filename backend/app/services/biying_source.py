@@ -49,7 +49,18 @@ class BiyingDataSource(BaseDataSource):
              logger.info("✅ Loading stock list from local cache (Static).")
              try:
                  with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    cache_data = json.load(f)
+                    # V5 Schema Validation: Check if 'industry' exists in the first item
+                    if cache_data and isinstance(cache_data, dict):
+                        first_value = next(iter(cache_data.values()))
+                        if "industry" not in first_value:
+                            logger.warning("⚠️ Cache schema outdated (missing 'industry'). Triggering full re-fetch.")
+                            # Do not return, let it fall through to fetch logic
+                        else:
+                            return cache_data
+                    else:
+                        # Empty or invalid -> refetch
+                        pass
              except Exception:
                  logger.warning("Cache file corrupted, refetching...")
         
