@@ -4,8 +4,18 @@
     :class="cardClass"
   >
     <div class="flex justify-between items-center mb-1">
-      <span class="font-bold text-lg tracking-wider">{{ data.name }}</span>
-      <span class="text-xs text-gray-400 font-mono">{{ data.code }}</span>
+      <div class="flex flex-col">
+          <span class="font-bold text-lg tracking-wider">{{ data.name }}</span>
+          <span class="text-xs text-gray-500 font-mono tracking-widest">{{ data.code }}</span>
+      </div>
+      <div class="flex flex-col text-right">
+          <span class="text-xs px-2 py-0.5 rounded bg-blue-900/50 text-blue-200 border border-blue-800/50 mb-1">
+            {{ data.industry || '未分类' }}
+          </span>
+          <span v-if="data.concept" class="text-[10px] text-gray-500 truncate max-w-[100px]">
+            {{ data.concept }}
+          </span>
+      </div>
     </div>
     
     <div class="flex justify-between items-end">
@@ -25,7 +35,7 @@
     </div>
     
     <div class="mt-2 pt-1 border-t border-gray-700/50 flex justify-between text-xs">
-        <span class="text-gray-500">{{ data.index_code }}</span>
+        <span class="text-gray-500 font-mono scale-90 origin-left">{{ data.timestamp.split('T')[1].split('.')[0] }}</span>
         <span class="text-gray-300">量比: <span class="font-bold text-yellow-500">{{ data.volume_ratio }}</span></span>
     </div>
   </div>

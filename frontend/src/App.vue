@@ -136,8 +136,15 @@ const handleAlert = (data) => {
     
     const targetList = lists[data.index_code];
     if (targetList) {
-        // Unshift to add to top
+        // Feature: Bubble Up (Remove existing instance of same stock so new one goes to top)
+        const existingIdx = targetList.findIndex(item => item.code === data.code);
+        if (existingIdx !== -1) {
+            targetList.splice(existingIdx, 1);
+        }
+
+        // Unshift to add to top (Visual: Top is "Top of List")
         targetList.unshift(data);
+        
         // Trim excess
         if (targetList.length > MAX_ITEMS_PER_COLUMN) {
             targetList.pop();

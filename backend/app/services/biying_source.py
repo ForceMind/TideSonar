@@ -3,7 +3,9 @@ import json
 import os
 import time
 import logging
-from typing import List, Dict, Optional
+import urllib.parse
+import concurrent.futures
+from typing import List, Dict, Optional, TypedDict, Any
 from datetime import datetime, date
 from backend.app.models.stock import StockData
 from backend.app.core.interfaces import BaseDataSource
@@ -14,227 +16,280 @@ logger = logging.getLogger(__name__)
 CACHE_DIR = "backend/data"
 CACHE_FILE = os.path.join(CACHE_DIR, "index_constituents.json")
 
-# Map our internal Index Codes to Biying/Standard Index codes
-# HS300/ZZ500: Use 'hszg/gg' standard index API
-# ZZ1000/ZZ2000: Use 'hslt/sectors' sector API
-INDEX_MAP = {
-    "HS300": "hs300",
-    "ZZ500": "zhishu_000905",
-    "ZZ1000": "中证1000",
-    "ZZ2000": "中证2000"
-}
+class StockMeta(TypedDict):
+    index: str
+    name: str 
+    industry: str
+    concept: str
+    block: str # Deprecated
 
 class BiyingDataSource(BaseDataSource):
     def __init__(self):
         self.license = settings.BIYING_LICENSE
-        if self.license == "YOUR_LICENSE_KEY_HERE":
-            logger.warning("Biying License not set! Please set BIYING_LICENSE in .env")
+        if not self.license or "YOUR" in self.license:
+            logger.warning("Biying License not set correctly!")
             
-        self.stock_index_map = self._load_or_update_stock_list()
-        # Session for connection pooling
         self.session = requests.Session()
         
-    def _load_or_update_stock_list(self) -> Dict[str, str]:
+        # Load Universe
+        self.stock_index_map: Dict[str, StockMeta] = self._load_or_update_stock_list()
+        
+    def _load_or_update_stock_list(self) -> Dict[str, StockMeta]:
         """
-        Load stock->index mapping from cache. 
-        If cache missing or stale (older than today), update it.
+        New V4 Logic:
+        1. Fetch ALL Stocks from hslt/list (Since hslt/sectors is unstable).
+        2. Fetch Concepts for ALL Stocks.
+        3. Detect Index (HS300/ZZ500/etc) and Block from Concepts.
+        4. Cache.
         """
         if not os.path.exists(CACHE_DIR):
             os.makedirs(CACHE_DIR)
             
-        should_update = True
         if os.path.exists(CACHE_FILE):
-            mod_time = os.path.getmtime(CACHE_FILE)
-            file_date = date.fromtimestamp(mod_time)
-            if file_date == date.today():
-                should_update = False
-                logger.info("Loading stock list from local cache.")
+             logger.info("✅ Loading stock list from local cache (Static).")
+             try:
+                 with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+             except Exception:
+                 logger.warning("Cache file corrupted, refetching...")
         
-        if should_update:
-            try:
-                mapping = self._fetch_indices_from_api()
-                with open(CACHE_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(mapping, f, ensure_ascii=False)
-                logger.info("Stock list updated from Biying API.")
-                return mapping
-            except Exception as e:
-                logger.error(f"Failed to update stock list from API: {e}")
-                if os.path.exists(CACHE_FILE):
-                    logger.warning("Falling back to stale cache.")
-                    with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-                        return json.load(f)
-                else:
-                    return {}
+        logger.info("⚡ Initializing Stock Universe (Full Scan Strategy)...")
+        
+        # Step 1: Get Global List
+        mapping = self._fetch_all_stocks()
+        if not mapping:
+            logger.error("Failed to fetch global stock list.")
+            return {}
+
+        # Step 2: Enrich with Concepts (Index + Block detection)
+        self._enrich_details(mapping)
+        
+        # Step 3: Save
+        if mapping:
+            with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+                json.dump(mapping, f, ensure_ascii=False)
+            logger.info(f"✅ Full Universe ({len(mapping)} stocks) saved to cache.")
+            return mapping
         else:
-            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            return {}
 
-    def _fetch_indices_from_api(self) -> Dict[str, str]:
-        """
-        Fetch constituents for all tracked indices.
-        Returns: Dict[stock_code, index_code]
-        """
+    def _fetch_all_stocks(self) -> Dict[str, StockMeta]:
+        """Fetch all stocks from hslt/list."""
         mapping = {}
-        for internal_name, index_code in INDEX_MAP.items():
-            stocks_list = []
-            
-            # Decide which API to use based on the code format
-            # Chinese characters -> Sector API (hslt/sectors)
-            # Alphanumeric -> Standard Index API (hszg/gg)
-            is_sector_api = any(u'\u4e00' <= char <= u'\u9fff' for char in index_code)
-            
-            try:
-                if is_sector_api:
-                    # Sector API: http://api.biyingapi.com/hslt/sectors/NAME/LICENSE
-                    url = f"http://api.biyingapi.com/hslt/sectors/{index_code}/{self.license}"
-                    logger.info(f"Fetching SECTOR constituents for {internal_name} ({index_code})...")
-                    # Increased timeout for large sectors (3000+ total requests sometimes slow)
-                    resp = requests.get(url, timeout=60)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        # Sector API returns dict: {'stocks': [...], ...}
-                        if isinstance(data, dict):
-                            stocks_list = data.get('stocks', [])
-                        else:
-                            logger.error(f"Unexpected sector format for {internal_name}: {type(data)}")
-                    else:
-                        logger.error(f"Sector API Error {resp.status_code} for {internal_name}")
-                
-                else:
-                    # Index API: http://api.biyingapi.com/hszg/gg/CODE/LICENSE
-                    url = f"http://api.biyingapi.com/hszg/gg/{index_code}/{self.license}"
-                    logger.info(f"Fetching INDEX constituents for {internal_name} ({index_code})...")
-                    resp = requests.get(url, timeout=15)
-                    if resp.status_code == 200:
-                        data = resp.json() 
-                        # Index API returns list: [...]
-                        if isinstance(data, list):
-                            stocks_list = data
-                        else:
-                            logger.error(f"Unexpected index format for {internal_name}: {type(data)}")
-                    else:
-                        logger.error(f"Index API Error {resp.status_code} for {internal_name}")
-
-                # Process the stock list (works for both formats if stocks_list is populated)
-                count = 0
-                for item in stocks_list:
-                    # 'dm' is code (daima)
-                    code = item.get('dm', '')
-                    # Clean the code: Remove .SH, .SZ, or other suffixes just in case
-                    if code:
-                        clean_code = code.split('.')[0]
-                        mapping[clean_code] = internal_name
-                        count += 1
-                logger.info(f"   -> Loaded {count} stocks for {internal_name}")
-                
-            except Exception as e:
-                logger.error(f"Request failed for {internal_name}: {e}")
-
-                
+        url = f"http://api.biyingapi.com/hslt/list/{self.license}"
+        try:
+            resp = requests.get(url, timeout=30)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    for item in data:
+                        code = item.get('dm', '')
+                        name = item.get('mc', '')
+                        if code:
+                            clean_code = code.split('.')[0]
+                            mapping[clean_code] = {
+                                "index": "OTHER", # Default
+                                "name": name,
+                                "industry": "",
+                                "concept": "",
+                                "block": ""
+                            }
+                    logger.info(f"   -> Found {len(mapping)} total stocks.")
+        except Exception as e:
+            logger.error(f"   -> Failed to fetch list: {e}")
         return mapping
 
+    def _enrich_details(self, mapping: Dict[str, StockMeta]):
+        """Fetch concepts to find Index adherence and Sector block."""
+        logger.info(f"   Fetching Metadata for {len(mapping)} stocks (50 Threads)...")
+        
+        all_codes = list(mapping.keys())
+        total = len(all_codes)
+        processed = 0
+        
+        # Priority rules for assigning index if multiple match
+        # Lower index in this list = Higher Priority override
+        # Actually logic: Only upgrade "OTHER" or specific order?
+        # Let's simple check strict strings.
+        
+        def fetch_meta(code):
+            url = f"http://api.biyingapi.com/hszg/zg/{code}/{self.license}"
+            found_index = "OTHER"
+            found_ind = ""
+            found_con = ""
+            try:
+                resp = requests.get(url, timeout=10) # 10s per request
+                if resp.status_code == 200:
+                    tags = resp.json()
+                    if isinstance(tags, list) and len(tags) > 0:
+                        # 1. Parse Tags for Industry and Concept
+                        # "sw_" or "sw2_" -> Industry
+                        # "gn_" or "chgn_" -> Concept (excluding some noise)
+                        
+                        # Find First Industry
+                        for t in tags:
+                            t_code = t.get("code", "")
+                            t_name = t.get("name", "")
+                            
+                            # Grab first Shenwan industry
+                            if not found_ind and ("sw_" in t_code or "sw2_" in t_code):
+                                found_ind = t_name.replace("A股-申万行业-", "").replace("A股-申万二级-", "")
+                        
+                        # Find First Concept (skip common noise like "融资融券")
+                        skip_concepts = ["融资融券", "转融券", "沪股通", "深股通", "含可转债", "富时罗素"]
+                        for t in tags:
+                            t_code = t.get("code", "")
+                            t_name = t.get("name", "").replace("A股-热门概念-", "").replace("A股-概念板块-", "")
+                            
+                            if ("gn_" in t_code or "chgn_" in t_code) and not found_con:
+                                # Check blacklist
+                                if not any(s in t_name for s in skip_concepts):
+                                    found_con = t_name
+                        
+                        # Fallback for display if nothing found
+                        if not found_ind and tags: found_ind = tags[0].get("name", "")
+                        
+                        # 2. Find Index Membership (Priority: HS300 > ZZ500 > ZZ1000 > ZZ2000)
+                        temp_index = "OTHER"
+                        
+                        # Optimization: Check all tags
+                        tag_codes = {t.get("code", "").lower() for t in tags}
+                        tag_names = {t.get("name", "") for t in tags}
+                        
+                        if "hs300" in tag_codes:
+                            temp_index = "HS300"
+                        elif "zz500" in tag_codes or "zhishu_000905" in tag_codes or "chgn_700015" in tag_codes:
+                            # 000905 is the official code for ZZ500 (CSI 500)
+                            # chgn_700015 is "Middle Cap" (中盘)
+                            temp_index = "ZZ500"
+                        elif "chgn_700016" in tag_codes: # Small Cap Proxy
+                            temp_index = "ZZ1000"
+                        elif "chgn_701262" in tag_codes: # Micro Cap Proxy
+                            temp_index = "ZZ2000"
+                        
+                        # Fallback for "OTHER":
+                        # If it hasn't been assigned to HS300/ZZ500, but is in the list,
+                        # treat remaining OTHER as ZZ2000 (Small/Micro tail map) so they aren't ignored
+                        # unless we want to be strict. User wants them to show up.
+                        if temp_index == "OTHER":
+                             temp_index = "ZZ2000" 
+
+                        found_index = temp_index
+
+                        # Old loop logic removed for set lookup speed
+                            
+            except Exception:
+                pass
+            return code, found_index, found_ind, found_con
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+            future_to_code = {executor.submit(fetch_meta, code): code for code in all_codes}
+            
+            for future in concurrent.futures.as_completed(future_to_code):
+                code, idx, ind, con = future.result()
+                processed += 1
+                
+                if idx != "OTHER":
+                    mapping[code]["index"] = idx
+                
+                mapping[code]["industry"] = ind
+                mapping[code]["concept"] = con
+                # Keep block compat
+                mapping[code]["block"] = ind 
+                    
+                if processed % 500 == 0:
+                    logger.info(f"     -> Processed {processed}/{total}...")
+                    
     def get_snapshot(self) -> List[StockData]:
         """
-        Alias for get_real_time_data to satisfy BaseDataSource interface.
-        """
-        return self.get_real_time_data()
-
-    def get_real_time_data(self) -> List[StockData]:
-        """
-        Fetch real-time data using Batch API (up to 20 stocks per request).
-        URL: http://api.biyingapi.com/hsrl/ssjy_more/...
-        This avoids the strict 1/min limit of the global snapshot API.
+        Fetch real-time data using Batch API (High Speed).
         """
         all_codes = list(self.stock_index_map.keys())
         if not all_codes:
             return []
 
-        # Helper to chunk list
-        def chunker(seq, size):
-            return (seq[pos:pos + size] for pos in range(0, len(seq), size))
-
         result = []
         now = datetime.now()
         
-        # We'll log the first batch success only to avoid spam
-        first_batch = True
+        BATCH_SIZE = 20
+        MAX_WORKERS = 20
         
-        # Use session for existing TCP connection reuse
-        # if not hasattr(self, 'session'):
-        #     self.session = requests.Session()
-        #     self.session.headers.update({
-        #         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        #     })
-
-        batch_count = 0
-        BATCH_SIZE = 15 # Reduced from 20 to be safer
-        total_batches = (len(all_codes) + BATCH_SIZE - 1) // BATCH_SIZE
+        # Chunk the codes
+        batches = [all_codes[i:i + BATCH_SIZE] for i in range(0, len(all_codes), BATCH_SIZE)]
         
-        for batch in chunker(all_codes, BATCH_SIZE):
-            batch_count += 1
-            codes_str = ",".join(batch)
+        def fetch_batch(batch_codes):
+            if not batch_codes: return []
+            codes_str = ",".join(batch_codes)
             url = f"http://api.biyingapi.com/hsrl/ssjy_more/{self.license}"
             params = {"stock_codes": codes_str}
-
+            res_items = []
             try:
-                # Use simple requests.get to match working test scripts (avoid Session/Cookie issues)
-                resp = requests.get(url, params=params, timeout=5)
-
+                resp = requests.get(url, params=params, timeout=4)
                 if resp.status_code == 200:
-                    data_list = resp.json()
-                    # data_list is typically a list of dicts
-                    if isinstance(data_list, list):
-                        for item in data_list:
-                            # Map fields based on user doc / observation
-                            # p: price, o: open, h: high, l: low
-                            # pc: pct_chg (?), zdf: zhang die fu
-                            # v: volume, cje: amount (cheng jiao e)
-                            # dm: code, mc: name (maybe)
+                    data = resp.json()
+                    if isinstance(data, list):
+                        res_items = data
+            except Exception:
+                pass 
+            return res_items
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            future_to_batch = {executor.submit(fetch_batch, b): b for b in batches}
+            
+            for future in concurrent.futures.as_completed(future_to_batch):
+                try:
+                    data_list = future.result()
+                    
+                    # 1. Validate Batch Result
+                    if not data_list or not isinstance(data_list, list):
+                        continue
+
+                    for item in data_list:
+                        try:
+                            # 2. Validate Item
+                            if not isinstance(item, dict):
+                                continue
 
                             code = item.get('dm')
                             if not code: continue
 
-                            idx_code = self.stock_index_map.get(code)
+                            # 3. Validate Metadata
+                            meta = self.stock_index_map.get(str(code)) # Ensure code is string lookup
+                            
+                            # If meta is missing or corrupted, use defaults
+                            if not meta or not isinstance(meta, dict):
+                                meta = {"index": "OTHER", "name": str(code), "block": ""}
 
-                            try:
-                                # Safe float conversion
-                                price = float(item.get('p', 0) or 0)
-                                # Try 'pc' (percent change) or 'zdf'
-                                pct_chg = float(item.get('pc', 0) or item.get('zdf', 0) or 0)
-                                volume = int(float(item.get('v', 0) or 0))
-                                amount = float(item.get('cje', 0) or 0)
-                                name = item.get('mc') or item.get('name') or code # Fallback
+                            idx_code = meta.get("index", "OTHER")
+                            final_name = meta.get("name") or item.get("mc") or str(code)
+                            # final_block is kept for fallback, but industry override is preferred
+                            final_block = meta.get("block") or ""
+                            
+                            # New Fields
+                            final_ind = meta.get("industry") or final_block
+                            final_con = meta.get("concept") or ""
 
-                                stock_obj = StockData(
-                                    code=code,
-                                    name=str(name),
-                                    price=price,
-                                    pct_chg=pct_chg,
-                                    volume=volume,
-                                    amount=amount,
-                                    timestamp=now,
-                                    index_code=idx_code or "UNKNOWN"
-                                )
-                                result.append(stock_obj)
-                            except Exception:
-                                continue
-
-                    if first_batch:
-                        # logger.info(f"Batch fetched successfully. Items: {len(data_list)}")
-                        first_batch = False
-                else:
-                    logger.warning(f"Batch API error: {resp.status_code}")
-
-            except Exception as e:
-                logger.error(f"Batch Fetch Error: {e}")
-            
-            # Rate Limiting: Sleep slightly between batches to avoid 429
-            # 190 batches * 0.05s = ~9.5s delay added total
-            # This is safer than bursting 190 requests instantly
-            time.sleep(0.05)
-            
-            # Optional: Log progress every 50 batches
-            if batch_count % 50 == 0:
-                logger.info(f"   Fetched {batch_count}/{total_batches} batches...")
+                            # 4. Construct Object
+                            stock_obj = StockData(
+                                code=str(code),
+                                name=str(final_name),
+                                price=float(item.get('p', 0) or 0),
+                                pct_chg=float(item.get('pc', 0) or item.get('zdf', 0) or 0),
+                                volume=int(float(item.get('v', 0) or 0)),
+                                amount=float(item.get('cje', 0) or 0),
+                                timestamp=now,
+                                index_code=idx_code,
+                                block=final_block,
+                                industry=final_ind,
+                                concept=final_con
+                            )
+                            result.append(stock_obj)
+                        except Exception:
+                            # Silently skip individual bad items to preserve batch
+                            continue
+                            
+                except Exception as e:
+                    logger.warning(f"Batch fetch failed: {e}")
+                    continue
 
         return result

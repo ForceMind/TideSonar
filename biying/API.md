@@ -15,6 +15,7 @@
 | **指数行业** | 指数/行业/概念树 | `http://api.biyingapi.com/hszg/list/您的licence` | 获取完整的行业、概念树形结构 |
 | | 某指数下股票 | `http://api.biyingapi.com/hszg/gg/代码/您的licence` | 获取指定板块或指数包含的股票 |
 | | 股票所属板块 | `http://api.biyingapi.com/hszg/zg/代码/您的licence` | 查询某只股票所属的所有板块 |
+| | 板块明细列表 | `http://api.biyingapi.com/hslt/sectors/板块指数名称（例如：概念指数）/您的licence` | 查询制定板块包含的股票 |
 | **涨跌股池** | 涨停股池 | `http://api.biyingapi.com/hslt/ztgc/日期/您的licence` | 获取指定日期的涨停股票详情 |
 | | 跌停股池 | `http://api.biyingapi.com/hslt/dtgc/日期/您的licence` | 获取指定日期的跌停股票详情 |
 | | 强势股/次新股 | `http://api.biyingapi.com/hslt/qsgc/您的licence` | 获取强势股、次新股及炸板股池 |

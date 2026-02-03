@@ -14,6 +14,10 @@ logger = logging.getLogger("TideSonar")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Start background tasks
+    from backend.app.core.config import settings
+    masked_key = settings.BIYING_LICENSE[:5] + "***" if settings.BIYING_LICENSE and "YOUR_LICENSE" not in settings.BIYING_LICENSE else "DEFAULT/MOCK"
+    logger.info(f"🚀 Server Starting. License Status: {masked_key}")
+
     redis_task = asyncio.create_task(redis_listener())
     producer_task = asyncio.create_task(run_mock_producer())
     
@@ -47,38 +51,36 @@ def read_root():
     return {"status": "ok", "service": "GuanChao Backend"}
 
 if __name__ == "__main__":
-    # Ensure License Key is present
     import os
+    import uvicorn
+    from backend.app.core.config import settings
+
+    # 1. Interactive License Input (Security Best Practice)
+    # Check if key is missing or is the default placeholder
     env_key = os.getenv("BIYING_LICENSE")
     if not env_key or "YOUR_LICENSE" in env_key:
         print("----------------------------------------------------------------")
         print("SECURITY NOTICE: License Key not found in .env (or is default).")
         print("Please enter your Biying License Key temporarily for this session.")
         print("----------------------------------------------------------------")
-        manual_key = input("Enter License Key: ").strip()
-        if manual_key:
-            os.environ["BIYING_LICENSE"] = manual_key
-            # IMPORTANT: Reload settings to pick up the new env var
-            from backend.app.core import config
-            from importlib import reload
-            reload(config)
-            # Re-import dependencies that might have cached the old settings
-            from backend.app.services import biying_source
-            reload(biying_source)
-            from backend.app.services import producer_task
-            reload(producer_task)
-            
-            print(f"✅ License Key set temporarily: {manual_key[:8]}******")
-        else:
-            print("❌ No key entered. Using default (MOCK MODE might be active).")
-    
-    import uvicorn
-    uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=True)
-    import os
-    from backend.app.core.config import settings
-    
+        try:
+            manual_key = input("Enter License Key: ").strip()
+            if manual_key:
+                # Set in environment so child processes (spawned by uvicorn) inherit it
+                os.environ["BIYING_LICENSE"] = manual_key
+                print(f"✅ License Key set temporarily for subprocesses.")
+            else:
+                print("❌ No key entered. Using default (MOCK MODE might be active).")
+        except (EOFError, OSError):
+            print("⚠️  Non-interactive mode detected. Skipping input.")
+
+    # 2. Port Configuration
     # Allow Port override via Env Var (e.g. for Server deployment)
     port = int(os.getenv("BACKEND_PORT", settings.BACKEND_PORT))
     logger.info(f"Starting Backend on Port {port}")
     
+    # 3. Start Uvicorn
+    # Use reload=True for development. Spawned process will inherit os.environ["BIYING_LICENSE"]
     uvicorn.run("backend.app.main:app", host="0.0.0.0", port=port, reload=True)
+
+

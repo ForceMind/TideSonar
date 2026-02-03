@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
     plugins: [vue()],
     base: env.VITE_BASE_PATH || '/', // Support subpath deployment
     server: {
-      port: parseInt(env.VITE_PORT) || 3000,
+      port: 3001, // Default to 3001 to avoid OpenUI (3000)
       host: '0.0.0.0'
     }
   }

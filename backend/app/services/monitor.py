@@ -48,13 +48,18 @@ class MarketMonitor:
             if stock.index_code not in target_indices:
                 continue
 
-            # 2. Filtering Logic - STRICTER FOR TESTING
-            # Condition B: Turnover > 50 Million (High liquidity)
-            if stock.amount <= 50_000_000:
+            # 2. Dynamic Filtering Logic based on Index
+            min_amount = 20_000_000 # Default for HS300/ZZ500
+            if stock.index_code == "ZZ1000":
+                min_amount = 10_000_000
+            elif stock.index_code == "ZZ2000":
+                min_amount = 3_000_000 # Much lower for microcaps
+
+            if stock.amount <= min_amount:
                 continue
                 
-            # Condition C: Significant Move (> 3.0% or < -3.0%)
-            if abs(stock.pct_chg) <= 3.0:
+            # Condition C: Significant Move (> 1.0% or < -1.0%) - Widened to ensure visibility
+            if abs(stock.pct_chg) <= 1.0: 
                 continue
 
             # Condition A: Volume Ratio (Simplified)

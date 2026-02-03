@@ -19,8 +19,13 @@ echo.
 
 :: 1. Start Backend in a new window
 echo [1/2] Launching Backend...
-:: Pass the license variable to the new cmd window using explicit set
-start "GuanChao Backend" cmd /k "set PYTHONPATH=%~dp0..&& set BIYING_LICENSE=%BIYING_LICENSE%&& python -m backend.app.main"
+:: Resolve Project Root (Parent of scripts folder)
+pushd %~dp0..
+set "PROJECT_ROOT=%CD%"
+popd
+
+:: Launch in new window, setting workdir to Project Root
+start "GuanChao Backend" /D "%PROJECT_ROOT%" cmd /k "set PYTHONPATH=%PROJECT_ROOT%&& set BIYING_LICENSE=%BIYING_LICENSE%&& python backend\app\main.py"
 
 :: 2. Start Frontend in a new window (Frontend doesn't need the key, backend handles data)
 echo [2/2] Launching Frontend...
