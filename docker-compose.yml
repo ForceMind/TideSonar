@@ -1,4 +1,4 @@
-version: '3.8'
+# version: '3.8' # Deprecated in V2
 
 services:
   # 1. 数据库 Service (Redis)

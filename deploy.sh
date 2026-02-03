@@ -99,6 +99,28 @@ echo -e "API监听端口: $BACKEND_PORT"
 # 3. 构建与运行
 echo ""
 echo -e "${GREEN}[2/3] 正在构建并启动服务...${NC}"
+
+# --- 自动配置 Docker 镜像加速 (解决国内无法拉取镜像的问题) ---
+if [ ! -f /etc/docker/daemon.json ]; then
+    echo "检测到未配置 Docker 镜像加速，正在自动配置..."
+    mkdir -p /etc/docker
+    cat > /etc/docker/daemon.json <<EOF
+{
+  "registry-mirrors": [
+    "https://docker.m.daocloud.io",
+    "https://huecker.io",
+    "https://mirror.baidubce.com",
+    "https://docker.nju.edu.cn"
+  ]
+}
+EOF
+    echo "重启 Docker 服务以应用配置..."
+    systemctl daemon-reload
+    systemctl restart docker
+    echo "Docker 镜像加速配置完成。"
+fi
+# -------------------------------------------------------
+
 echo "(初次运行需要下载镜像，可能需要几分钟，请喝杯咖啡稍等)"
 
 # 兼容 docker-compose 和 docker compose
@@ -112,8 +134,15 @@ fi
 # 停止旧服务
 $COMPOSE_CMD down --remove-orphans
 
-# 启动新服务
-$COMPOSE_CMD up -d --build
+# 启动新服务 (捕获错误)
+if ! $COMPOSE_CMD up -d --build; then
+    echo ""
+    echo -e "${RED}[错误] 部署失败！${NC}"
+    echo "Docker 无法拉取镜像 (Connection Timeout)。"
+    echo "这通常是因为国内服务器网络无法连接 Docker Hub。"
+    echo "请尝试手动修改 /etc/docker/daemon.json 添加可用的加速镜像源。"
+    exit 1
+fi
 
 # 4. 成功提示
 echo ""
