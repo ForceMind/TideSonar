@@ -28,17 +28,24 @@ async def run_mock_producer():
     try:
         while True:
             # 0. Check Market Hours & Active Clients (Lazy Mode)
-            if len(manager.active_connections) == 0:
-                 # No clients connected, save bandwidth/resources
-                 # Check less frequently (e.g., every 2 seconds) just to stay ready
+            # If no clients, we sleep. BUT if we have no data yet (server just started), we must fetch once regardless of clients.
+            if len(manager.active_connections) == 0 and manager.has_data():
+                 # No clients connected AND we have data -> Sleep
                  await asyncio.sleep(2)
                  continue
 
-            if not MarketSchedule.is_market_open():
-                 # Log once per minute?
-                 # logger.info("Market Closed. Sleeping...")
-                 await asyncio.sleep(60)
-                 continue
+            market_open = MarketSchedule.is_market_open()
+
+            if not market_open:
+                 # Logic: If closed, usually we sleep. 
+                 # BUT if 'manager' has no data (e.g. Server restart at night), we must fetch ONCE to populate the list.
+                 if manager.has_data():
+                     logger.info("Market Closed (Data Cached). Sleeping 60s...")
+                     await asyncio.sleep(60)
+                     continue
+                 else:
+                     logger.info("🌙 Market Closed but Cache Empty. Fetching Closing Snapshot ONCE...")
+                     # Allow to fall through to Fetch Logic below...
 
             # 1. Get Data
             # source.get_snapshot is blocking (requests), so run in thread to avoid freezing loop
@@ -89,16 +96,28 @@ async def run_mock_producer():
 
                     # Track distribution for debug
                      sent_counts = {"HS300": 0, "ZZ500": 0, "ZZ1000": 0, "ZZ2000": 0}
+                     
+                     # NEW: Snapshot Persistence
+                     # Convert all alerts to JSON strings first
+                     snapshot_json_list = [a.model_dump_json() for a in final_selection]
+                     
+                     # Store in Manager so new connections get them immediately
+                     manager.update_snapshot(snapshot_json_list)
 
-                     for alert in final_selection:
+                     for alert_str in snapshot_json_list:
                         try:
-                            # Verify Index Code matches frontend keys
-                            if alert.index_code in sent_counts:
-                                sent_counts[alert.index_code] += 1
-                                
-                            await manager.broadcast(alert.model_dump_json())
+                            # Parse back just to check index or just broadcast string directly (optimized)
+                            # To keep logic simple and safe, we broadcast the string.
+                            await manager.broadcast(alert_str)
+                            
+                            # Simple counter (approximate since we don't parse back index here for speed, or we assume logic above is correct)
+                            # Actually let's assume distribution logic above is correct for the log.
                         except Exception as e:
                             logger.error(f"Broadcast error: {e}")
+                            
+                     # Log correct distribution from the selection list objects
+                     for a in final_selection:
+                         if a.index_code in sent_counts: sent_counts[a.index_code] += 1
                     
                      logger.info(f"   -> Sent {len(final_selection)} alerts (Top Activity). Dist: {sent_counts}")
             

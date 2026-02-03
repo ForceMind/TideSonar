@@ -1,4 +1,5 @@
 from datetime import datetime, time, date
+import os
 
 class MarketSchedule:
     @staticmethod
@@ -7,6 +8,10 @@ class MarketSchedule:
         Check if current time is within trading hours.
         Rules: Mon-Fri, 9:25-11:30, 13:00-15:00
         """
+        # Debug Override
+        if os.getenv("FORCE_MARKET_OPEN", "false").lower() == "true":
+            return True
+
         now = datetime.now()
         
         # 1. Check Weekend
