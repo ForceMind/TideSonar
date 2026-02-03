@@ -1,6 +1,6 @@
 import requests
 
-LICENSE = "7E1A1BA6-0402-4505-82B1-ECCAA7281B26"
+LICENSE = ""
 
 def test_endpoint(name, url):
     print(f"Testing {name}: {url}")

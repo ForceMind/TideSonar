@@ -1,6 +1,6 @@
 import requests
 
-LICENSE = "7E1A1BA6-0402-4505-82B1-ECCAA7281B26"
+LICENSE = ""
 
 def test_code(code_str):
     url = f"http://api.biyingapi.com/hsrl/ssjy_more/{LICENSE}"

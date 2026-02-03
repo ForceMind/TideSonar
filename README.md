@@ -69,7 +69,7 @@ chmod +x scripts/deploy_server.sh
 ### 方式 C: 手动启动
 **后端:**
 ```powershell
-$env:PYTHONPATH="e:\Privy\TideSonar"; python -m backend.app.main
+$env:PYTHONPATH="\TideSonar"; python -m backend.app.main
 ```
 **前端:**
 ```bash

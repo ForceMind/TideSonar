@@ -1,7 +1,7 @@
 import requests
 import time
 
-LICENSE = "7E1A1BA6-0402-4505-82B1-ECCAA7281B26"
+LICENSE = ""
 URL = f"http://api.biyingapi.com/hsrl/ssjy_more/{LICENSE}"
 
 def test_batch():
