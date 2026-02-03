@@ -71,7 +71,6 @@ fi
 echo ""
 echo -e "${GREEN}[1/3] 参数配置${NC}"
 read -p "请输入 Biying API 密钥 (按回车跳过则使用模拟数据): " USER_LICENSE
-export BIYING_LICENSE=${USER_LICENSE}
 
 # 2. 端口配置
 echo ""
@@ -79,20 +78,27 @@ echo "默认端口: 前端 WEB = 80, 后端 API = 8000"
 read -p "是否需要自定义端口? (输入 y 修改，直接回车保持默认): " MODIFY_PORTS
 
 # 默认值
-export FRONTEND_PORT=80
-export BACKEND_PORT=8000
+FRONTEND_PORT=80
+BACKEND_PORT=8000
 
 if [[ "$MODIFY_PORTS" =~ ^[Yy]$ ]]; then
     read -p "请输入 前端 WEB 端口 (例如 8080): " INPUT_FE
-    if [ ! -z "$INPUT_FE" ]; then export FRONTEND_PORT=$INPUT_FE; fi
+    if [ ! -z "$INPUT_FE" ]; then FRONTEND_PORT=$INPUT_FE; fi
     
     read -p "请输入 后端 API 端口 (例如 9000): " INPUT_BE
-    if [ ! -z "$INPUT_BE" ]; then export BACKEND_PORT=$INPUT_BE; fi
+    if [ ! -z "$INPUT_BE" ]; then BACKEND_PORT=$INPUT_BE; fi
 fi
 
+# 写入 .env 文件 (持久化配置，解决 logs 时的变量警告)
+echo "BIYING_LICENSE=$USER_LICENSE" > .env
+echo "FRONTEND_PORT=$FRONTEND_PORT" >> .env
+echo "BACKEND_PORT=$BACKEND_PORT" >> .env
+# 如果需要，也可以写入 IP，但目前我们用自适应方案
+# echo "SERVER_IP=..." >> .env
+
 echo ""
-echo -e "${BLUE}配置确认:${NC}"
-echo -e "License密钥: ${BIYING_LICENSE:0:5}******"
+echo -e "${BLUE}配置确认 (已保存至 .env):${NC}"
+echo -e "License密钥: ${USER_LICENSE:0:5}******"
 echo -e "WEB访问地址: http://localhost:$FRONTEND_PORT"
 echo -e "API监听端口: $BACKEND_PORT"
 
