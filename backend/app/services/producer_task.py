@@ -37,15 +37,18 @@ async def run_mock_producer():
             market_open = MarketSchedule.is_market_open()
 
             if not market_open:
-                 # Logic: If closed, usually we sleep. 
-                 # BUT if 'manager' has no data (e.g. Server restart at night), we must fetch ONCE to populate the list.
-                 if manager.has_data():
-                     logger.info("Market Closed (Data Cached). Sleeping 60s...")
+                 # Logic: If closed
+                 if manager.has_data() and not manager.is_data_stale():
+                     # If we have data AND it's fresh (post-close), just sleep.
+                     # This prevents the loop from running again and again.
+                     logger.info("Market Closed (Data Cached & Fresh). Sleeping 60s...")
                      await asyncio.sleep(60)
                      continue
                  else:
-                     logger.info("🌙 Market Closed but Cache Empty. Fetching Closing Snapshot ONCE...")
-                     # Allow to fall through to Fetch Logic below...
+                     logger.info("🌙 Market Closed. Cache Empty or Stale (e.g. 13:00 data). Fetching Closing Snapshot ONCE...")
+                     # If data is stale (e.g. we had 13:00 data but now it's 20:00), we proceed to fetch.
+                     # This ensures we overwrite the 13:00 cache with 15:00 close price.
+                     pass
 
             # 1. Get Data
             # source.get_snapshot is blocking (requests), so run in thread to avoid freezing loop
@@ -122,8 +125,15 @@ async def run_mock_producer():
                      logger.info(f"   -> Sent {len(final_selection)} alerts (Top Activity). Dist: {sent_counts}")
             
             # 3. Frequency
-            # 0.5s is very fast. 200 msgs * 2 Hz = 400 msg/s. Acceptable.
-            await asyncio.sleep(poll_interval)
+            if not market_open:
+                # If we are here and market is closed, it means we just performed the "One-Off Fetch".
+                # We should sleep longer to avoid hammering, or just rely on the loop check next time.
+                # Setting a long sleep here is safe.
+                logger.info("🌙 One-off fetch complete. Snapshot stored. Sleeping 60s...")
+                await asyncio.sleep(60)
+            else:
+                # Normal trading hours: fast poll
+                await asyncio.sleep(poll_interval)
             
     except asyncio.CancelledError:
         logger.info("Data Producer Task Cancelled.")

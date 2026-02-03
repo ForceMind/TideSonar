@@ -67,29 +67,79 @@ then
     fi
 fi
 
-# 1. 密钥配置
+# 0.5 代码更新 (Git Pull)
+echo ""
+echo -e "${GREEN}[0/3] 代码同步${NC}"
+if [ -d ".git" ]; then
+    echo "检测到 Git 仓库，正在拉取最新代码..."
+    git pull origin main || git pull 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 代码已更新至最新。${NC}"
+    else
+        echo -e "${RED}⚠️ 代码拉取失败 (可能是因为本地有修改冲突，或者没有设置 upstream)。${NC}"
+        echo "将继续使用当前本地代码进行部署..."
+    fi
+else
+    echo "未检测到 Git 仓库 (可能是直接上传的 zip 包)，跳过代码更新。"
+fi
+
+# 1. 密钥配置与更新
 echo ""
 echo -e "${GREEN}[1/3] 参数配置${NC}"
-read -p "请输入 Biying API 密钥 (按回车跳过则使用模拟数据): " USER_LICENSE
 
-# 2. 端口配置
+# 1.1 加载现有配置
+CURRENT_LICENSE=""
+CURRENT_FE_PORT="80"
+CURRENT_BE_PORT="8000"
+
+if [ -f ".env" ]; then
+    echo "检测到现有配置文件 (.env)，正在加载..."
+    # 加载变量但不导出，避免污染 Shell
+    if grep -q "BIYING_LICENSE=" ".env"; then
+        CURRENT_LICENSE=$(grep "BIYING_LICENSE=" ".env" | cut -d '=' -f2)
+    fi
+    if grep -q "FRONTEND_PORT=" ".env"; then
+        CURRENT_FE_PORT=$(grep "FRONTEND_PORT=" ".env" | cut -d '=' -f2)
+    fi
+    if grep -q "BACKEND_PORT=" ".env"; then
+        CURRENT_BE_PORT=$(grep "BACKEND_PORT=" ".env" | cut -d '=' -f2)
+    fi
+fi
+
+# 1.2 交互配置
 echo ""
-echo "默认端口: 前端 WEB = 80, 后端 API = 8000"
-read -p "是否需要自定义端口? (输入 y 修改，直接回车保持默认): " MODIFY_PORTS
+echo "------------------------------------------------"
+echo -e "当前配置:"
+if [ -z "$CURRENT_LICENSE" ]; then
+    echo -e "  License: [无 / 模拟模式]"
+else
+    echo -e "  License: ${CURRENT_LICENSE:0:5}******"
+fi
+echo -e "  前端端口: $CURRENT_FE_PORT"
+echo -e "  后端端口: $CURRENT_BE_PORT"
+echo "------------------------------------------------"
 
-# 默认值
-FRONTEND_PORT=80
-BACKEND_PORT=8000
+read -p "是否需要修改上述配置? (输入 y 修改，直接回车保持不变): " MODIFY_CONFIG
 
-if [[ "$MODIFY_PORTS" =~ ^[Yy]$ ]]; then
-    read -p "请输入 前端 WEB 端口 (例如 8080): " INPUT_FE
+USER_LICENSE=$CURRENT_LICENSE
+FRONTEND_PORT=$CURRENT_FE_PORT
+BACKEND_PORT=$CURRENT_BE_PORT
+
+if [[ "$MODIFY_CONFIG" =~ ^[Yy]$ ]]; then
+    # 修改 License
+    read -p "请输入 Biying API 密钥 (按回车保持不变): " INPUT_LICENSE
+    if [ ! -z "$INPUT_LICENSE" ]; then USER_LICENSE=$INPUT_LICENSE; fi
+    
+    # 修改端口
+    read -p "请输入 前端 WEB 端口 (当前: $FRONTEND_PORT, 按回车保持): " INPUT_FE
     if [ ! -z "$INPUT_FE" ]; then FRONTEND_PORT=$INPUT_FE; fi
     
-    read -p "请输入 后端 API 端口 (例如 9000): " INPUT_BE
+    read -p "请输入 后端 API 端口 (当前: $BACKEND_PORT, 按回车保持): " INPUT_BE
     if [ ! -z "$INPUT_BE" ]; then BACKEND_PORT=$INPUT_BE; fi
 fi
 
-# 写入 .env 文件 (持久化配置，解决 logs 时的变量警告)
+# 写入 .env 文件
 echo "BIYING_LICENSE=$USER_LICENSE" > .env
 echo "FRONTEND_PORT=$FRONTEND_PORT" >> .env
 echo "BACKEND_PORT=$BACKEND_PORT" >> .env
