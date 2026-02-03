@@ -28,19 +28,22 @@ then
         if command -v yum &> /dev/null; then
             # CentOS / Alibaba Cloud Linux
             echo "检测到系统: CentOS / RHEL / Alibaba Cloud"
+            echo "正在切换至阿里云镜像源以加速安装..."
             sudo yum update -y
             sudo yum install -y yum-utils
-            sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+            # 使用阿里云的 Docker 镜像源，解决国内连接 docker.com 失败的问题
+            sudo yum-config-manager --add-repo http://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
             sudo yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
             sudo systemctl start docker
             sudo systemctl enable docker
         elif command -v apt-get &> /dev/null; then
             # Ubuntu / Debian
             echo "检测到系统: Ubuntu / Debian"
+            # 使用阿里云镜像源设置
             sudo apt-get update
             sudo apt-get install -y ca-certificates curl gnupg
-            # 官方一键脚本
-            curl -fsSL https://get.docker.com | sudo sh
+            # 尝试使用 DaoCloud 镜像脚本或直接重试(暂时保持官方，Ubuntu 通常可以用 apt 换源)
+            curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun
         else
             echo -e "${RED}无法识别的系统，请手动安装 Docker！${NC}"
             exit 1
