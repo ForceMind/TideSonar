@@ -95,14 +95,35 @@ const connectWebSocket = () => {
     // For now, simple env var is best for docker flexibility.
     
     // If VITE_BACKEND_HOST is not set and we are in production, assume same host
+    // and let Nginx Proxy handle the port mapping (Standard Docker/Server Setup)
     if (!import.meta.env.VITE_BACKEND_HOST && import.meta.env.PROD) {
-        wsHost = window.location.host; // Use current window host
+        // Nginx is on same host, proxies /ws/ to backend
+        // So we connect to wss://hostname/ws/alerts
+        wsHost = window.location.host; 
     }
 
-    const wsUrl = `${protocol}//${wsHost}/ws/alerts`;
-    console.log("Connecting WS to:", wsUrl);
+    // Handle Proxy Path: If using Nginx proxy, wsUrl should probably be just host + path
+    // If wsHost includes port (dev), logic is fine.
+    // If wsHost is plain domain (prod), logic is fine.
+    
+    // Fix: If running behind Nginx with /ws/ location, we don't need port 8000
+    // The previous logic defaulted to 'localhost:8000'.
+    // New logic: Use relative path for WebSocket if supported, or absolute from window.location
+    
+    let wsUrl_final = '';
+    
+    if (import.meta.env.PROD) {
+       // Production: Use relative protocol and host, Nginx handles /ws route
+       // window.location.host includes the port if custom (e.g. 8080)
+       wsUrl_final = `${protocol}//${window.location.host}/ws/alerts`;
+    } else {
+       // Dev: Explicit Backend Port
+       wsUrl_final = `ws://localhost:8000/ws/alerts`;
+    }
 
-    socket = new WebSocket(wsUrl);
+    console.log("Connecting WS to:", wsUrl_final);
+
+    socket = new WebSocket(wsUrl_final);
 
     socket.onopen = () => {
         console.log("WebSocket connected");
