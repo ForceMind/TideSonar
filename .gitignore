@@ -1,1 +1,25 @@
+# Environments
 .env
+.venv
+env/
+venv/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*.log
+*.egg-info/
+
+# Frontend / Node
+node_modules/
+dist/
+npm-debug.log*
+
+# IDE / Editor
+.idea/
+.vscode/
+.DS_Store
+
+# TideSonar Data
+backend/data/cache_*.json
