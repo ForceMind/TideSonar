@@ -50,11 +50,23 @@ class BiyingDataSource(BaseDataSource):
              try:
                  with open(CACHE_FILE, 'r', encoding='utf-8') as f:
                     cache_data = json.load(f)
-                    # V5 Schema Validation: Check if 'industry' exists in the first item
+                    # V5 Schema Validation: Check if 'industry' exists and is populated in sample
                     if cache_data and isinstance(cache_data, dict):
                         first_value = next(iter(cache_data.values()))
-                        if "industry" not in first_value:
-                            logger.warning("⚠️ Cache schema outdated (missing 'industry'). Triggering full re-fetch.")
+                        has_concept = "industry" in first_value
+                        is_populated = bool(first_value.get("industry") or first_value.get("concept"))
+                        
+                        # We demand at least some items to be populated. 
+                        # Since we check the first one, if it's empty, we might pessimistically reload.
+                        # To be safer: checks first 5 items.
+                        sample_populated = False
+                        for _, v in list(cache_data.items())[:5]:
+                            if v.get("industry") or v.get("concept"):
+                                sample_populated = True
+                                break
+                        
+                        if not has_concept or not sample_populated:
+                            logger.warning("⚠️ Cache schema outdated or empty metadata. Triggering full re-fetch.")
                             # Do not return, let it fall through to fetch logic
                         else:
                             return cache_data
@@ -124,7 +136,9 @@ class BiyingDataSource(BaseDataSource):
         # Let's simple check strict strings.
         
         def fetch_meta(code):
-            url = f"http://api.biyingapi.com/hszg/zg/{code}/{self.license}"
+            # V5 Update: Use 'gggn' (Concept List) instead of 'zg' (Profile)
+            # This ensures we get the list of tags needed for Industry/Concept classification
+            url = f"http://api.biyingapi.com/hszg/gggn/{code}/{self.license}"
             found_index = "OTHER"
             found_ind = ""
             found_con = ""
@@ -132,6 +146,7 @@ class BiyingDataSource(BaseDataSource):
                 resp = requests.get(url, timeout=10) # 10s per request
                 if resp.status_code == 200:
                     tags = resp.json()
+                    # Ensure tags is a list (API convention for gggn)
                     if isinstance(tags, list) and len(tags) > 0:
                         # 1. Parse Tags for Industry and Concept
                         # "sw_" or "sw2_" -> Industry

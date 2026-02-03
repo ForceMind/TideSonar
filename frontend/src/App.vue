@@ -11,12 +11,12 @@
       </div>
     </header>
 
-    <!-- Main Content: 4 Columns -->
-    <main class="flex-1 flex overflow-hidden divide-x divide-gray-700">
+    <!-- Main Content: 4 Columns (Mobile: Stacked 4 Rows, Desktop: 4 Columns) -->
+    <main class="flex-1 flex flex-col md:flex-row overflow-hidden md:divide-x divide-y md:divide-y-0 divide-gray-700">
       
       <!-- Column 1: HS300 -->
-      <div class="flex-1 flex flex-col min-w-0">
-        <div class="h-10 bg-gray-800/80 backdrop-blur border-b border-gray-700 flex items-center justify-center">
+      <div class="flex-1 flex flex-col min-w-0 min-h-0">
+        <div class="h-10 bg-gray-800/80 backdrop-blur border-b border-gray-700 flex items-center justify-center shrink-0">
             <h2 class="font-bold text-gray-200">沪深300 <span class="text-xs text-gray-500 font-normal">核心资产</span></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">
@@ -25,8 +25,8 @@
       </div>
 
       <!-- Column 2: ZZ500 -->
-      <div class="flex-1 flex flex-col min-w-0">
-        <div class="h-10 bg-gray-800/80 backdrop-blur border-b border-gray-700 flex items-center justify-center">
+      <div class="flex-1 flex flex-col min-w-0 min-h-0">
+        <div class="h-10 bg-gray-800/80 backdrop-blur border-b border-gray-700 flex items-center justify-center shrink-0">
             <h2 class="font-bold text-gray-200">中证500 <span class="text-xs text-gray-500 font-normal">中盘成长</span></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">
@@ -35,8 +35,8 @@
       </div>
 
       <!-- Column 3: ZZ1000 -->
-      <div class="flex-1 flex flex-col min-w-0">
-        <div class="h-10 bg-gray-800/80 backdrop-blur border-b border-gray-700 flex items-center justify-center">
+      <div class="flex-1 flex flex-col min-w-0 min-h-0">
+        <div class="h-10 bg-gray-800/80 backdrop-blur border-b border-gray-700 flex items-center justify-center shrink-0">
             <h2 class="font-bold text-gray-200">中证1000 <span class="text-xs text-gray-500 font-normal">中小活跃</span></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">
@@ -45,8 +45,8 @@
       </div>
 
       <!-- Column 4: ZZ2000 -->
-      <div class="flex-1 flex flex-col min-w-0">
-        <div class="h-10 bg-gray-800/80 backdrop-blur border-b border-gray-700 flex items-center justify-center">
+      <div class="flex-1 flex flex-col min-w-0 min-h-0">
+        <div class="h-10 bg-gray-800/80 backdrop-blur border-b border-gray-700 flex items-center justify-center shrink-0">
             <h2 class="font-bold text-gray-200">中证2000 <span class="text-xs text-gray-500 font-normal">微盘投机</span></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">

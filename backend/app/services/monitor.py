@@ -81,6 +81,8 @@ class MarketMonitor:
                 amount=stock.amount,
                 volume_ratio=round(volume_ratio, 2),
                 index_code=stock.index_code,
+                industry=stock.industry,
+                concept=stock.concept,
                 timestamp=stock.timestamp.isoformat(),
                 reason=f"量比:{volume_ratio:.1f}|金额:{stock.amount/10000:.0f}万|涨幅:{stock.pct_chg}%"
             )
