@@ -1,19 +1,38 @@
 version: '3.8'
 
 services:
-  # 1. Redis Service
+  # 1. 数据库 Service (Redis)
   redis:
     image: redis:7-alpine
     container_name: tidesonar-redis
-    # Ports removed for security (Internal network only).
-    # If debugging is needed, uncomment:
-    # ports:
-    #   - "6379:6379"
     volumes:
        - redis_data:/data
     restart: always
 
-  # 3. Frontend Service (Nginx)
+  # 2. 后端 API Service
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: tidesonar-backend
+    environment:
+      # 传入 License
+      - BIYING_LICENSE=${BIYING_LICENSE}
+      # 内部链接 (Docker DNS会自动解析 service name 'redis')
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+    ports:
+      # 映射主机端口 -> 容器端口
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      - redis
+    volumes:
+      # 挂载数据目录以持久化缓存 (可选)
+      - ./backend/data:/app/backend/data
+    restart: always
+
+  # 3. 前端 Web Service (Nginx)
   frontend:
     build:
       context: .
@@ -25,23 +44,6 @@ services:
       - backend
     restart: always
 
-networks:
-  default:
-    name: tidesonar-net
-
-    restart: always
-
-  # 3. Frontend Service (Nginx)
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    container_name: tidesonar-frontend
-    environment:
-      - VITE_BACKEND_HOST=${SERVER_IP}:${BACKEND_PORT:-8000}
-    ports:
-      - "${FRONTEND_PORT:-3001}:80"
-    restart: always
-
+# 数据卷
 volumes:
   redis_data:
