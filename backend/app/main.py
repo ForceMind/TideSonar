@@ -18,16 +18,25 @@ async def lifespan(app: FastAPI):
     masked_key = settings.BIYING_LICENSE[:5] + "***" if settings.BIYING_LICENSE and "YOUR_LICENSE" not in settings.BIYING_LICENSE else "DEFAULT/MOCK"
     logger.info(f"🚀 Server Starting. License Status: {masked_key}")
 
+    # NEW: Schedule Daily History Update (After Market Close)
+    # We create a simple loop that checks time, or trigger it manually via API.
+    # For now, we will add a trivial check loop or just expose an endpoint.
+    # A background loop checking for 15:30 is best.
+    from backend.app.services.history_scheduler import start_scheduler
+    scheduler_task = asyncio.create_task(start_scheduler())
+
     redis_task = asyncio.create_task(redis_listener())
     producer_task = asyncio.create_task(run_mock_producer())
     
     yield
     
     # Shutdown: Clean up
+    scheduler_task.cancel()
     producer_task.cancel()
     redis_task.cancel()
     try:
         await producer_task
+        await scheduler_task
         await redis_task
     except asyncio.CancelledError:
         pass

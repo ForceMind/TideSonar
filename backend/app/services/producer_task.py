@@ -82,18 +82,37 @@ async def run_mock_producer():
                      final_selection = []
                      
                      # 2. Select Top Candidates per Index
-                     # Sort by 'amount' (Turnover money) -> Proxies activity/funds
-                     # This ensures the list doesn't flicker randomly; the top active stocks stay top active.
                      for idx, items in grouped.items():
-                         # Filter: Optional - Only show stocks with volume > 0
+                         # Filter: Only show active stocks
                          valid_items = [x for x in items if x.amount > 0]
                          
-                         # Sort: Descending by Amount (Big Money)
-                         # Secondary Sort: Pct Change (Big Movers)
-                         valid_items.sort(key=lambda x: x.amount, reverse=True)
+                         # Strategy V3: Weighted Scoring (Amount + Momentum + Volume)
+                         # Formula: Score = Amount * (1 + Boost)
                          
-                         # Take Top 30 per index (Total ~120, comfortable for UI)
-                         # This acts as a "Focus List" of the market leaders.
+                         def calculate_score(stock):
+                            # Base: Amount (Money talks)
+                            s = stock.amount
+                            
+                            # Factor 1: Momentum (Limit Up Priority)
+                            # If nearing limit up (>8.5%), give massive 3x boost to ensure Top visibility
+                            if stock.pct_chg >= 8.5:
+                                s *= 3.0
+                            elif stock.pct_chg >= 5.0:
+                                s *= 1.5
+                            
+                            # Factor 2: Volume Ratio (Explosion)
+                            # If volume is 2x normal (vol_ratio > 2.0), boost 20%
+                            if stock.volume_ratio >= 2.0:
+                                s *= 1.2
+                            elif stock.volume_ratio >= 1.5:
+                                s *= 1.1
+                                
+                            return s
+
+                         # Sort by calculated score DESC
+                         valid_items.sort(key=calculate_score, reverse=True)
+                         
+                         # Take Top 30
                          top_picks = valid_items[:30]
                          final_selection.extend(top_picks)
 
