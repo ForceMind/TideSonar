@@ -24,12 +24,29 @@
     <div v-if="showChart" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" @click.self="toggleChart">
       <div class="bg-gray-900 border border-gray-700 p-4 rounded-lg shadow-2xl w-11/12 md:w-3/4 lg:w-1/2 h-1/2 flex flex-col">
           <div class="flex justify-between items-center mb-2">
-              <h3 class="text-white font-bold">市场资金热度趋势</h3>
+              <h3 class="text-white font-bold">市场资金热度趋势 (Market Heat)</h3>
               <button @click="toggleChart" class="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
           </div>
-          <div id="activity-chart" class="flex-1 w-full h-full"></div>
-          <div class="text-xs text-gray-500 mt-2 text-center">
-              * 统计每一分钟内新进入Top30榜单的个股数量，反映市场资金的轮动速度。
+          <div id="activity-chart" class="flex-1 w-full h-full min-h-[50%]"></div>
+          
+          <!-- Explanation Section -->
+          <div class="mt-4 p-4 bg-gray-800/50 rounded text-xs text-gray-400 space-y-2 overflow-y-auto max-h-[30%] border-t border-gray-700">
+              <p class="font-bold text-gray-300">🔥 什么是“热度”？</p>
+              <p>
+                  热度值代表 <span class="text-blue-400">最近1分钟内新上榜的个股数量</span> (去重统计)。
+                  <br/>
+                  公式：<code>Count(Unique_New_Entry) per minute</code>
+              </p>
+              
+              <p class="font-bold text-gray-300 mt-2">📊 数值解读：</p>
+              <ul class="list-disc list-inside space-y-1 ml-1">
+                  <li><span class="text-green-400 font-mono">0 ~ 10</span> : <strong class="text-gray-300">情绪稳定</strong> — 龙头股锁仓惜售，排名稳固，适合持股待涨。</li>
+                  <li><span class="text-yellow-400 font-mono">10 ~ 30</span>: <strong class="text-gray-300">正常轮动</strong> — 板块内部出现分歧，前排个股有买卖换手，注意观察承接力度。</li>
+                  <li><span class="text-red-400 font-mono">> 30</span> : <strong class="text-gray-300">剧烈变盘</strong> — 大量新资金正在攻击新目标，老龙头被批量抛弃，市场处于高风险高收益的切换期。</li>
+              </ul>
+              <p class="text-gray-500 italic mt-2 border-t border-gray-700 pt-2">
+                  * 注：系统会自动过滤重复上下榜的干扰，同一只股票在1分钟内反复进出榜单只计算1次热度。
+              </p>
           </div>
       </div>
     </div>
@@ -103,12 +120,15 @@ const lists = reactive({
 });
 
 const isConnected = ref(false);
-const currentChurn = ref(0); // Real-time new entry counter (Current Minute)
+const currentChurnSet = reactive(new Set()); // Track unique stocks entering list per minute
+const currentChurn = computed(() => currentChurnSet.size);
+
 const showChart = ref(false);
 let chartInstance = null;
 
 // History Data for Chart
 const todayTrend = reactive([]); 
+
 
 let socket = null;
 
@@ -207,7 +227,7 @@ setInterval(() => {
     localStorage.setItem(key, JSON.stringify(todayTrend));
     
     // Reset counter for next minute
-    currentChurn.value = 0;
+    currentChurnSet.clear();
     
     // Update chart if open
     if (showChart.value && chartInstance) {
@@ -324,8 +344,10 @@ const handleAlert = (data) => {
             // Add new (This is a CHURN event)
             // Only count as Churn if the list was already full (meaning we are displacing someone)
             // This prevents the initial page load (0 -> 120 items) from counting as "High Churn"
+            // FIX: Use Set to count UNIQUE new faces only. 
+            // If Rank 29 and Rank 31 swap places 10 times, it counts as 1 churn, not 10.
             if (targetList.length >= MAX_ITEMS_PER_COLUMN) {
-                currentChurn.value++;
+                currentChurnSet.add(data.code);
             }
             targetList.push(data);
         }
