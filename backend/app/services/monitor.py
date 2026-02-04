@@ -35,7 +35,6 @@ class MarketMonitor:
         import json
         
         # Try to load 'history_baseline.json' from root or config path
-        # In a real system, this would query InfluxDB or a Data Service
         history_path = os.getenv("HISTORY_DATA_PATH", "history_baseline.json")
         
         if os.path.exists(history_path):
@@ -43,27 +42,72 @@ class MarketMonitor:
                 with open(history_path, 'r') as f:
                     self.baseline_volumes = json.load(f)
                 print(f"[Monitor] Loaded historical baseline for {len(self.baseline_volumes)} stocks.")
+                # Debug: Print first 3 keys to verify format
+                sample_keys = list(self.baseline_volumes.keys())[:3]
+                print(f"[Monitor] Sample Keys: {sample_keys}")
             except Exception as e:
                 print(f"[Monitor] Failed to load history data: {e}")
         else:
-            print("[Monitor] No history data found. Volume Ratio will default to 1.0 (Safe Mode).")
+            print(f"[Monitor] No history data found at {os.path.abspath(history_path)}. Volume Ratio will default to 1.0.")
 
-    def _get_baseline_volume(self, code: str) -> float:
+    def _get_trading_minutes(self, dt: pd.Timestamp) -> int:
         """
-        Get the baseline volume for the current minute from history.
+        Calculate trading minutes elapsed since 9:30 today.
+        Trading Hours: 9:30-11:30 (120m), 13:00-15:00 (120m).
         """
-        # 1. Try loaded history
-        if code in self.baseline_volumes:
-            return self.baseline_volumes[code]
+        # Parse simple hours
+        # Normalize to today's date to avoid date diff issues
+        t = dt.time()
+        
+        start_am = pd.Timestamp("09:30").time()
+        end_am = pd.Timestamp("11:30").time()
+        start_pm = pd.Timestamp("13:00").time()
+        end_pm = pd.Timestamp("15:00").time()
+        
+        minutes = 0
+        
+        # Simple Logic: Convert to minutes from midnight
+        current_min = t.hour * 60 + t.minute
+        
+        # AM Session
+        am_start_min = 9 * 60 + 30
+        am_end_min = 11 * 60 + 30
+        
+        # PM Session
+        pm_start_min = 13 * 60
+        pm_end_min = 15 * 60
+        
+        if current_min < am_start_min:
+            return 1 # Just open
             
-        # 2. Fallback: Return -1 to indicate "Data Missing"
-        # We DO NOT simulate random data anymore per user request.
-        return -1.0
+        if current_min <= am_end_min:
+            return current_min - am_start_min
+            
+        if current_min < pm_start_min:
+            return 120 # Lunch break (frozen at 120)
+            
+        if current_min <= pm_end_min:
+            return 120 + (current_min - pm_start_min)
+            
+        return 240 # Closed
 
     def detect_anomalies(self, snapshot: List[StockData]) -> List[StockAlert]:
         alerts = []
         
         target_indices = {"HS300", "ZZ500", "ZZ1000", "ZZ2000"}
+        
+        # Get minutes elapsed for WR calculation
+        # Use simple current time or timestamp from first stock
+        if snapshot:
+            ref_time = snapshot[0].timestamp
+            minutes_elapsed = self._get_trading_minutes(ref_time)
+            # Avoid division by zero
+            minutes_elapsed = max(1, minutes_elapsed)
+        else:
+            minutes_elapsed = 240
+            
+        # Debug Log once per cycle
+        # print(f"[Monitor] Calculation Cycle. Minutes Elapsed: {minutes_elapsed}")
         
         for stock in snapshot:
             # 1. Filter Index
@@ -79,31 +123,29 @@ class MarketMonitor:
 
             if stock.amount <= min_amount:
                 continue
-                
-            # Condition C: Significant Move
-            # V5 Update: User wants "Top Amount" stability. 
-            # We REMOVE the price fluctuation filter (abs(pct_chg) > 1.0).
-            # Why? Because a stock with huge amount but 0% change (battleground) is still important.
-            # Filtering by 1% causes stocks to flicker in/out of the Top 30 list.
-            # if abs(stock.pct_chg) <= 1.0: 
-            #    continue
 
-            # Condition A: Volume Ratio (Simplified)
-            # Since we don't have real minute-level baseline, we'll just check if volume is decent
+            # Condition A: Volume Ratio (Check Raw Volume first)
             if stock.volume < 100:
                 continue
 
-            # Condition A: Volume Ratio
-            # Logic: volume_ratio = volume / baseline
-            baseline = self._get_baseline_volume(stock.code)
+            # Condition A: Volume Ratio Calculation
+            # Formula: (Current Vol / Minutes) / (Baseline 5-Day Avg Vol / 240 mins) ? 
+            # NO. Baseline is "Average 5-min Vol" from history_updater.
+            # Avg_1min_Vol = Baseline / 5
+            # Current_1min_Vol = Current_Vol / Minutes_Elapsed
+            # VR = Current_1min_Vol / Avg_1min_Vol
             
-            if baseline > 0:
-                volume_ratio = stock.volume / baseline
+            baseline_5min = self._get_baseline_volume(stock.code)
+            
+            volume_ratio = 1.0
+            
+            if baseline_5min > 0:
+                avg_1min = baseline_5min / 5.0
+                curr_1min = stock.volume / minutes_elapsed
+                if avg_1min > 0:
+                     volume_ratio = curr_1min / avg_1min
             else:
-                # If no history, we cannot calculate Volume Ratio.
-                # Default to 1.0 (Neutral) so it doesn't affect sorting negatively,
-                # or 0.0 if we want to penalize unknown stocks.
-                # Given we prioritize Amount, 1.0 is safer to avoid burying new valid stocks.
+                # If no history, assume 1.0
                 volume_ratio = 1.0
 
             # HIT!
