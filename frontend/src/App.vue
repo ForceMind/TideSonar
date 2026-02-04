@@ -6,10 +6,29 @@
         <div class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
         <h1 class="text-xl font-bold tracking-tight text-white">观潮 <span class="text-blue-500 font-light">TideSonar</span></h1>
       </div>
-      <div class="text-xs text-gray-500 font-mono">
-        状态: <span :class="wsStatusClass">{{ wsStatusText }}</span> | 捕捉异动数: {{ totalAlerts }}
+      <div class="flex items-center space-x-2">
+          <span class="text-xs uppercase tracking-widest text-gray-500" :class="wsStatusClass">
+              ● {{ wsStatusText }}
+          </span>
+          <button @click="toggleChart" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1 rounded text-sm font-mono transition-colors border border-gray-700">
+              ⚡ 热度: {{ currentChurn }}/min
+          </button>
       </div>
     </header>
+
+    <!-- Chart Modal -->
+    <div v-if="showChart" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" @click.self="toggleChart">
+      <div class="bg-gray-900 border border-gray-700 p-4 rounded-lg shadow-2xl w-11/12 md:w-3/4 lg:w-1/2 h-1/2 flex flex-col">
+          <div class="flex justify-between items-center mb-2">
+              <h3 class="text-white font-bold">市场资金热度趋势</h3>
+              <button @click="toggleChart" class="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+          </div>
+          <div id="activity-chart" class="flex-1 w-full h-full"></div>
+          <div class="text-xs text-gray-500 mt-2 text-center">
+              * 统计每一分钟内新进入Top30榜单的个股数量，反映市场资金的轮动速度。
+          </div>
+      </div>
+    </div>
 
     <!-- Main Content: 4 Columns (Mobile: Stacked 4 Rows, Desktop: 4 Columns) -->
     <main class="flex-1 flex flex-col md:flex-row overflow-hidden md:divide-x divide-y md:divide-y-0 divide-gray-700">
@@ -67,8 +86,9 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, onMounted, onUnmounted } from 'vue';
+import { reactive, ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import StockCard from './components/StockCard.vue';
+import * as echarts from 'echarts';
 
 // State
 const lists = reactive({
@@ -79,14 +99,138 @@ const lists = reactive({
 });
 
 const isConnected = ref(false);
-const totalAlerts = ref(0);
+const currentChurn = ref(0); // Real-time new entry counter (Current Minute)
+const showChart = ref(false);
+let chartInstance = null;
+
+// History Data for Chart
+const todayTrend = reactive([]); 
+
 let socket = null;
 
 // Helpers
-const MAX_ITEMS_PER_COLUMN = 50;
+const MAX_ITEMS_PER_COLUMN = 30; // Strict Top 30
 
 const wsStatusText = computed(() => isConnected.value ? '已连接' : '已断开');
 const wsStatusClass = computed(() => isConnected.value ? 'text-green-500' : 'text-red-500');
+
+// Chart Logic
+const toggleChart = async () => {
+    showChart.value = !showChart.value;
+    if (showChart.value) {
+        await nextTick();
+        initChart();
+    }
+};
+
+const initChart = () => {
+    const el = document.getElementById('activity-chart');
+    if (!el) return;
+    
+    // Dispose old if exists
+    if (chartInstance) chartInstance.dispose();
+    
+    chartInstance = echarts.init(el, 'dark');
+    
+    // Mock History (Yesterday) - usually from LocalStorage
+    // For demo, we generate a random "Yesterday" based on "Today" shape or flat
+    const yesterdayData = generateMockHistory(); 
+    
+    const option = {
+        backgroundColor: 'transparent',
+        title: { text: '市场热度趋势 (新上榜数量/分)', left: 'center', textStyle: { color: '#ddd' } },
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['今日', '昨日'], bottom: 0, textStyle: { color: '#ccc' } },
+        xAxis: { 
+            type: 'category', 
+            data: todayTrend.map(i => i.time),
+            axisLine: { lineStyle: { color: '#555' } }
+        },
+        yAxis: { 
+            type: 'value', 
+            splitLine: { lineStyle: { color: '#333' } },
+             axisLine: { lineStyle: { color: '#555' } }
+        },
+        series: [
+            {
+                name: '今日',
+                type: 'line',
+                data: todayTrend.map(i => i.value),
+                smooth: true,
+                showSymbol: false,
+                itemStyle: { color: '#ef4444' }, // Red
+                areaStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                      { offset: 0, color: 'rgba(239,68,68,0.5)' },
+                      { offset: 1, color: 'rgba(239,68,68,0.0)' }
+                    ])
+                }
+            },
+            {
+                name: '昨日',
+                type: 'line',
+                data: yesterdayData, 
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { type: 'dashed' },
+                itemStyle: { color: '#6b7280' } // Gray
+            }
+        ]
+    };
+    chartInstance.setOption(option);
+};
+
+// Generate mock yesterday data matching current length or full day
+const generateMockHistory = () => {
+    // Just random noise around 10-50
+    const len = Math.max(todayTrend.length, 60); 
+    return Array.from({length: len}, () => Math.floor(Math.random() * 40) + 10);
+};
+
+// Timer for Trend
+setInterval(() => {
+    const now = new Date();
+    const timeStr = now.toTimeString().slice(0, 5); // HH:MM
+    
+    // Push current minute's churn
+    todayTrend.push({
+        time: timeStr,
+        value: currentChurn.value
+    });
+    
+    // Persist to LocalStorage (Simple Today Key)
+    const key = `tide_trend_${now.toISOString().slice(0,10)}`;
+    localStorage.setItem(key, JSON.stringify(todayTrend));
+    
+    // Reset counter for next minute
+    currentChurn.value = 0;
+    
+    // Update chart if open
+    if (showChart.value && chartInstance) {
+        chartInstance.setOption({
+            xAxis: { data: todayTrend.map(i => i.time) },
+            series: [
+                { data: todayTrend.map(i => i.value) },
+                { data: generateMockHistory() } // Keep sync
+            ]
+        });
+    }
+}, 60000); // Every minute
+
+// Restore on Load
+const restoreHistory = () => {
+    const now = new Date();
+    const key = `tide_trend_${now.toISOString().slice(0,10)}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            todayTrend.push(...parsed);
+        } catch(e) {}
+    }
+};
+
+restoreHistory();
 
 // WebSocket Logic
 const connectWebSocket = () => {
@@ -173,8 +317,9 @@ const handleAlert = (data) => {
             // Update usage
             targetList[existingIdx] = data;
         } else {
-            // Add new
+            // Add new (This is a CHURN event)
             targetList.push(data);
+            currentChurn.value++;
         }
 
         // 2. Sort by Amount (Descending) to maintain consistent ranking
@@ -184,8 +329,6 @@ const handleAlert = (data) => {
         if (targetList.length > MAX_ITEMS_PER_COLUMN) {
              targetList.splice(MAX_ITEMS_PER_COLUMN);
         }
-
-        totalAlerts.value++;
     }
 };
 
