@@ -19,7 +19,12 @@ except ImportError:
 # Settings
 BIYINAPI_BASE_URL = "https://api.biyingapi.com/hsstock/history"
 LICENSE = os.getenv("BIYING_LICENSE", "YOUR_LICENSE_HERE") 
-HISTORY_DATA_FILE = "history_baseline.json"
+# Save to app/data directory so it persists and is easily found
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+HISTORY_DATA_FILE = os.path.join(DATA_DIR, "history_baseline.json")
 
 logger = logging.getLogger(__name__)
 

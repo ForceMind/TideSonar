@@ -35,9 +35,26 @@ class MarketMonitor:
         import json
         
         # Try to load 'history_baseline.json' from root or config path
-        history_path = os.getenv("HISTORY_DATA_PATH", "history_baseline.json")
+        # Assuming we are running from backend root or app root
+        # Priority: 1. ENV PATH 2. app/data/ 3. CWD
         
-        if os.path.exists(history_path):
+        env_path = os.getenv("HISTORY_DATA_PATH")
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        default_path = os.path.join(base_dir, "data", "history_baseline.json")
+        cwd_path = "history_baseline.json"
+        
+        possible_paths = []
+        if env_path: possible_paths.append(env_path)
+        possible_paths.append(default_path)
+        possible_paths.append(cwd_path)
+        
+        history_path = None
+        for p in possible_paths:
+            if os.path.exists(p):
+                history_path = p
+                break
+        
+        if history_path:
             try:
                 with open(history_path, 'r') as f:
                     self.baseline_volumes = json.load(f)
