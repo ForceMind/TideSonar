@@ -20,7 +20,9 @@
             <h2 class="font-bold text-gray-200">沪深300 <span class="text-xs text-gray-500 font-normal">核心资产</span></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">
-            <StockCard v-for="item in lists.HS300" :key="item.id" :data="item" />
+            <TransitionGroup name="list" tag="div" class="relative">
+                <StockCard v-for="item in lists.HS300" :key="item.id" :data="item" />
+            </TransitionGroup>
         </div>
       </div>
 
@@ -30,7 +32,9 @@
             <h2 class="font-bold text-gray-200">中证500 <span class="text-xs text-gray-500 font-normal">中盘成长</span></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">
-            <StockCard v-for="item in lists.ZZ500" :key="item.id" :data="item" />
+            <TransitionGroup name="list" tag="div" class="relative">
+                <StockCard v-for="item in lists.ZZ500" :key="item.id" :data="item" />
+            </TransitionGroup>
         </div>
       </div>
 
@@ -40,7 +44,9 @@
             <h2 class="font-bold text-gray-200">中证1000 <span class="text-xs text-gray-500 font-normal">中小活跃</span></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">
-            <StockCard v-for="item in lists.ZZ1000" :key="item.id" :data="item" />
+            <TransitionGroup name="list" tag="div" class="relative">
+                <StockCard v-for="item in lists.ZZ1000" :key="item.id" :data="item" />
+            </TransitionGroup>
         </div>
       </div>
 
@@ -50,7 +56,9 @@
             <h2 class="font-bold text-gray-200">中证2000 <span class="text-xs text-gray-500 font-normal">微盘投机</span></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">
-             <StockCard v-for="item in lists.ZZ2000" :key="item.id" :data="item" />
+             <TransitionGroup name="list" tag="div" class="relative">
+                 <StockCard v-for="item in lists.ZZ2000" :key="item.id" :data="item" />
+             </TransitionGroup>
         </div>
       </div>
 
@@ -152,24 +160,31 @@ const connectWebSocket = () => {
 };
 
 const handleAlert = (data) => {
-    // Add unique ID for Vue :key
-    data.id = new Date().getTime() + Math.random().toString(16).slice(2);
+    // Add unique ID for Vue :key (Use Code for Persistence + Animation)
+    data.id = data.code;
     
     const targetList = lists[data.index_code];
     if (targetList) {
-        // Feature: Bubble Up (Remove existing instance of same stock so new one goes to top)
+        // Feature: Ranking Board (Sort by Amount)
+        // 1. Check if exists
         const existingIdx = targetList.findIndex(item => item.code === data.code);
+        
         if (existingIdx !== -1) {
-            targetList.splice(existingIdx, 1);
+            // Update usage
+            targetList[existingIdx] = data;
+        } else {
+            // Add new
+            targetList.push(data);
         }
 
-        // Unshift to add to top (Visual: Top is "Top of List")
-        targetList.unshift(data);
+        // 2. Sort by Amount (Descending) to maintain consistent ranking
+        targetList.sort((a, b) => b.amount - a.amount);
         
-        // Trim excess
+        // 3. Trim excess (Keep Top X)
         if (targetList.length > MAX_ITEMS_PER_COLUMN) {
-            targetList.pop();
+             targetList.splice(MAX_ITEMS_PER_COLUMN);
         }
+
         totalAlerts.value++;
     }
 };
@@ -191,5 +206,23 @@ onUnmounted(() => {
 .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
+}
+
+/* List Transitions */
+.list-move,
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.5s cubic-bezier(0.55, 0, 0.1, 1);
+}
+
+.list-enter-from,
+.list-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.list-leave-active {
+  position: absolute;
+  width: 100%;
 }
 </style>

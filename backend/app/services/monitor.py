@@ -58,13 +58,17 @@ class MarketMonitor:
             if stock.amount <= min_amount:
                 continue
                 
-            # Condition C: Significant Move (> 1.0% or < -1.0%) - Widened to ensure visibility
-            if abs(stock.pct_chg) <= 1.0: 
-                continue
+            # Condition C: Significant Move
+            # V5 Update: User wants "Top Amount" stability. 
+            # We REMOVE the price fluctuation filter (abs(pct_chg) > 1.0).
+            # Why? Because a stock with huge amount but 0% change (battleground) is still important.
+            # Filtering by 1% causes stocks to flicker in/out of the Top 30 list.
+            # if abs(stock.pct_chg) <= 1.0: 
+            #    continue
 
             # Condition A: Volume Ratio (Simplified)
             # Since we don't have real minute-level baseline, we'll just check if volume is decent
-            if stock.volume < 1000: 
+            if stock.volume < 100 
                 continue
 
             # Calculate a mock volume ratio or set to 1.0 if missing

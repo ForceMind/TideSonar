@@ -1,6 +1,6 @@
 <template>
   <div 
-    class="p-2 mb-2 rounded border-l-4 shadow-lg transition-all duration-300 animate-slide-in"
+    class="p-2 mb-2 rounded border-l-4 shadow-lg transition-all duration-300"
     :class="cardClass"
   >
     <div class="flex justify-between items-center mb-1">
