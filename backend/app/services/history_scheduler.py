@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime
 from backend.app.services.history_updater import update_history_baseline
-from backend.app.services.source import get_snapshot # Reuse stock list from source or define strictly
+# from backend.app.services.source import get_snapshot # Removed incorrect import
 
 logger = logging.getLogger(__name__)
 
