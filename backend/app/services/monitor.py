@@ -68,7 +68,7 @@ class MarketMonitor:
 
             # Condition A: Volume Ratio (Simplified)
             # Since we don't have real minute-level baseline, we'll just check if volume is decent
-            if stock.volume < 100 
+            if stock.volume < 100:
                 continue
 
             # Calculate a mock volume ratio or set to 1.0 if missing
