@@ -30,12 +30,10 @@
           <div id="activity-chart" class="flex-1 w-full h-full min-h-[50%]"></div>
           
           <!-- Explanation Section -->
-          <div class="mt-4 p-4 bg-gray-800/50 rounded text-xs text-gray-400 space-y-2 overflow-y-auto max-h-[30%] border-t border-gray-700">
+          <div class="mt-4 p-4 bg-gray-800/50 rounded text-xs text-gray-400 space-y-2 border-t border-gray-700">
               <p class="font-bold text-gray-300">🔥 什么是“热度”？</p>
               <p>
-                  热度值代表 <span class="text-blue-400">最近1分钟内新上榜的个股数量</span> (去重统计)。
-                  <br/>
-                  公式：<code>Count(Unique_New_Entry) per minute</code>
+                  热度值代表 <span class="text-blue-400">最近1分钟内新上榜的个股数量</span>。
               </p>
               
               <p class="font-bold text-gray-300 mt-2">📊 数值解读：</p>
@@ -44,9 +42,6 @@
                   <li><span class="text-yellow-400 font-mono">10 ~ 30</span>: <strong class="text-gray-300">正常轮动</strong> — 板块内部出现分歧，前排个股有买卖换手，注意观察承接力度。</li>
                   <li><span class="text-red-400 font-mono">> 30</span> : <strong class="text-gray-300">剧烈变盘</strong> — 大量新资金正在攻击新目标，老龙头被批量抛弃，市场处于高风险高收益的切换期。</li>
               </ul>
-              <p class="text-gray-500 italic mt-2 border-t border-gray-700 pt-2">
-                  * 注：系统会自动过滤重复上下榜的干扰，同一只股票在1分钟内反复进出榜单只计算1次热度。
-              </p>
           </div>
       </div>
     </div>
@@ -162,18 +157,21 @@ const initChart = () => {
     
     const option = {
         backgroundColor: 'transparent',
-        title: { text: '市场热度趋势 (新上榜数量/分)', left: 'center', textStyle: { color: '#ddd' } },
-        tooltip: { trigger: 'axis' },
+        title: { text: null }, // Remove Title to save space on mobile
+        grid: { left: '15%', right: '5%', top: '10%', bottom: '20%', containLabel: true }, // Fix Mobile Cutoff
+        tooltip: { trigger: 'axis', formatter: '{b} <br/> 热度: {c}' },
         legend: { data: ['今日', '昨日'], bottom: 0, textStyle: { color: '#ccc' } },
         xAxis: { 
             type: 'category', 
             data: todayTrend.map(i => i.time),
-            axisLine: { lineStyle: { color: '#555' } }
+            axisLine: { lineStyle: { color: '#555' } },
+            axisLabel: { color: '#888' }
         },
         yAxis: { 
             type: 'value', 
             splitLine: { lineStyle: { color: '#333' } },
-             axisLine: { lineStyle: { color: '#555' } }
+            axisLine: { lineStyle: { color: '#555' } },
+            axisLabel: { color: '#888' }
         },
         series: [
             {
@@ -249,7 +247,14 @@ const restoreHistory = () => {
     if (saved) {
         try {
             const parsed = JSON.parse(saved);
-            todayTrend.push(...parsed);
+            // DATA HEALING: If we detect huge numbers from previous version (>200), clear and restart
+            const hasAnomaly = parsed.some(p => p.value > 200);
+            if (hasAnomaly) {
+                console.warn("Detected anomaly in history (old version data), clearing chart history.");
+                localStorage.removeItem(key);
+            } else {
+                todayTrend.push(...parsed);
+            }
         } catch(e) {}
     }
 };
