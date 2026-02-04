@@ -50,6 +50,17 @@ class MarketMonitor:
         else:
             print(f"[Monitor] No history data found at {os.path.abspath(history_path)}. Volume Ratio will default to 1.0.")
 
+    def _get_baseline_volume(self, code: str) -> float:
+        """
+        Get the baseline volume for the current minute from history.
+        """
+        # 1. Try loaded history
+        if code in self.baseline_volumes:
+            return self.baseline_volumes[code]
+            
+        # 2. Fallback: Return -1 to indicate "Data Missing"
+        return -1.0
+
     def _get_trading_minutes(self, dt: pd.Timestamp) -> int:
         """
         Calculate trading minutes elapsed since 9:30 today.
