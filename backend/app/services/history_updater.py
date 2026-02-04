@@ -77,7 +77,7 @@ def format_stock_code(code: str) -> str:
     if code.startswith('4') or code.startswith('8'): return f"{code}.BJ"
     return f"{code}.SZ"
 
-async def update_history_baseline_task(stock_list: Optional[List[str]] = None):
+async def update_history_baseline(stock_list: Optional[List[str]] = None):
     """
     Orchestrator:
     1. If stock_list is None, fetch Universe (HS300/ZZ500/ZZ1000/ZZ2000) from Source.
@@ -167,5 +167,5 @@ if __name__ == "__main__":
     if sys.platform == 'win32':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         
-    asyncio.run(update_history_baseline_task())
+    asyncio.run(update_history_baseline())
 
