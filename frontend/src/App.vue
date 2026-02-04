@@ -7,11 +7,15 @@
         <h1 class="text-xl font-bold tracking-tight text-white">观潮 <span class="text-blue-500 font-light">TideSonar</span></h1>
       </div>
       <div class="flex items-center space-x-2">
-          <span class="text-xs uppercase tracking-widest text-gray-500" :class="wsStatusClass">
-              ● {{ wsStatusText }}
+          <!-- Mobile: Hide label, just show dot -->
+          <span class="flex items-center text-xs uppercase tracking-widest text-gray-500" :class="wsStatusClass">
+              <span class="hidden md:inline">● {{ wsStatusText }}</span>
+              <span class="md:hidden">●</span>
           </span>
-          <button @click="toggleChart" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1 rounded text-sm font-mono transition-colors border border-gray-700">
-              ⚡ 热度: {{ currentChurn }}/min
+          
+          <button @click="toggleChart" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 md:px-3 py-1 rounded text-sm font-mono transition-colors border border-gray-700 whitespace-nowrap">
+              <span class="hidden md:inline">⚡ 热度: {{ currentChurn }}/min</span>
+              <span class="md:hidden">⚡ {{ currentChurn }}</span>
           </button>
       </div>
     </header>
@@ -311,15 +315,19 @@ const handleAlert = (data) => {
     if (targetList) {
         // Feature: Ranking Board (Sort by Amount)
         // 1. Check if exists
-        const existingIdx = targetList.findIndex(item => item.code === data.code);
+        const existingIdx = targetList.findIndex(item => String(item.code) === String(data.code));
         
         if (existingIdx !== -1) {
             // Update usage
             targetList[existingIdx] = data;
         } else {
             // Add new (This is a CHURN event)
+            // Only count as Churn if the list was already full (meaning we are displacing someone)
+            // This prevents the initial page load (0 -> 120 items) from counting as "High Churn"
+            if (targetList.length >= MAX_ITEMS_PER_COLUMN) {
+                currentChurn.value++;
+            }
             targetList.push(data);
-            currentChurn.value++;
         }
 
         // 2. Sort by Amount (Descending) to maintain consistent ranking
