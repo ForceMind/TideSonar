@@ -1,6 +1,9 @@
 # Frontend Build Stage
 FROM node:18-alpine as builder
 
+# Use NPM Mirror
+RUN npm config set registry https://registry.npmmirror.com/
+
 WORKDIR /app
 COPY ./frontend/package*.json ./
 RUN npm install

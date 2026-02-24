@@ -1,7 +1,12 @@
 # Backend Dockerfile
 FROM python:3.10-slim
 
+# CHANGE SOURCE TO ALIYUN (Speed up build in China)
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list \
+    && sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list
+
 # Install Timezone Data for correct local time (Asia/Shanghai)
+# Now utilizing the fast Aliyun mirror
 RUN apt-get update && apt-get install -y tzdata \
     && ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && dpkg-reconfigure -f noninteractive tzdata \
@@ -10,9 +15,9 @@ RUN apt-get update && apt-get install -y tzdata \
 
 WORKDIR /app
 
-# Install Deps
+# Install Deps with Tsinghua Mirror
 COPY ./backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # Copy Code
 # We copy the 'backend' folder into /app/backend so structure is preserved
