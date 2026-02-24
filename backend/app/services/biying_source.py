@@ -229,6 +229,8 @@ class BiyingDataSource(BaseDataSource):
     def get_snapshot(self) -> List[StockData]:
         """
         Fetch real-time data using Batch API (High Speed).
+        Documentation: http://api.biyingapi.com/hsrl/ssjy_more/... (Limit 20 per request)
+        Rate Limit: 3000 calls/minute.
         """
         all_codes = list(self.stock_index_map.keys())
         if not all_codes:
@@ -237,8 +239,15 @@ class BiyingDataSource(BaseDataSource):
         result = []
         now = datetime.now()
         
+        # NOTE: User Confirmed Limits (2026/02/24)
+        # Max Batch Size per Request: 20
+        # Max Requests per Minute: 3000
+        # If Total Stocks ~5181. 5181 / 20 = ~260 Requests per Cycle.
+        # Max Cycles per Minute = 3000 / 260 = ~11.5 Cycles.
+        # Safe Cycle Interval = 60s / 11.5 = ~5.2 seconds (rounding up to 6s).
+        
         BATCH_SIZE = 20
-        MAX_WORKERS = 20
+        MAX_WORKERS = 30 # Reduced workers to avoid burst limits
         
         # Chunk the codes
         batches = [all_codes[i:i + BATCH_SIZE] for i in range(0, len(all_codes), BATCH_SIZE)]
@@ -250,7 +259,8 @@ class BiyingDataSource(BaseDataSource):
             params = {"stock_codes": codes_str}
             res_items = []
             try:
-                resp = requests.get(url, params=params, timeout=4)
+                # Reduced timeout to fail fast on slow chunks
+                resp = requests.get(url, params=params, timeout=2.5) 
                 if resp.status_code == 200:
                     data = resp.json()
                     if isinstance(data, list):

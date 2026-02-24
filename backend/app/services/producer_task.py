@@ -20,7 +20,13 @@ async def run_mock_producer():
     # Only Biying Source Supported Now
     logger.info("Using REAL DATA SOURCE (BiyingAPI)")
     source = BiyingDataSource()
-    poll_interval = 0.5 # Handled by internal batch logic
+    # Rate Limit Calculation:
+    # 3000 requests/minute limit.
+    # 5181 stocks / 20 per request = 260 requests per cycle.
+    # Max safe cycles per minute = 3000 / 260 ≈ 11 cycles.
+    # Min interval = 60s / 11 cycles ≈ 5.5 seconds.
+    # Set to 6 seconds to be safe.
+    poll_interval = 6.0 
 
     monitor = MarketMonitor()
 
@@ -151,7 +157,7 @@ async def run_mock_producer():
                 logger.info("🌙 One-off fetch complete. Snapshot stored. Sleeping 60s...")
                 await asyncio.sleep(60)
             else:
-                # Normal trading hours: fast poll
+                # Normal trading hours: rate limited interval
                 await asyncio.sleep(poll_interval)
             
     except asyncio.CancelledError:
