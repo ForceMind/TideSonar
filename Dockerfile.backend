@@ -2,8 +2,13 @@
 FROM python:3.10-slim
 
 # CHANGE SOURCE TO ALIYUN (Speed up build in China)
-RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list \
-    && sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list
+# Handle both old (sources.list) and new (debian.sources) formats
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
+    else \
+        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+        sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
+    fi
 
 # Install Timezone Data for correct local time (Asia/Shanghai)
 # Now utilizing the fast Aliyun mirror
