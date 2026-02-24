@@ -127,6 +127,11 @@ const isConnected = ref(false);
 const currentChurnSet = reactive(new Set()); // Track unique stocks entering list per minute
 const currentChurn = computed(() => currentChurnSet.size);
 
+// Batch Processing Queue
+const messageBuffer = [];
+let batchProcessingTimer = null;
+const BATCH_INTERVAL = 1000; // Process updates every 1 second (combines burst messages)
+
 const showChart = ref(false);
 let chartInstance = null;
 
@@ -318,12 +323,17 @@ const connectWebSocket = () => {
     socket.onopen = () => {
         console.log("WebSocket connected");
         isConnected.value = true;
+        startBatchProcessor();
     };
 
     socket.onmessage = (event) => {
         try {
             const data = JSON.parse(event.data);
-            handleAlert(data);
+            if (Array.isArray(data)) {
+                 messageBuffer.push(...data);
+            } else {
+                 messageBuffer.push(data);
+            }
         } catch (e) {
             console.error("Failed to parse message", e);
         }
@@ -332,6 +342,7 @@ const connectWebSocket = () => {
     socket.onclose = () => {
         console.log("WebSocket disconnected");
         isConnected.value = false;
+        stopBatchProcessor();
         // Reconnect after 3s
         setTimeout(connectWebSocket, 3000);
     };
@@ -341,47 +352,84 @@ const connectWebSocket = () => {
     };
 };
 
-const handleAlert = (data) => {
-    // Add unique ID for Vue :key (Use Code for Persistence + Animation)
-    data.id = data.code;
-    
-    const targetList = lists[data.index_code];
-    if (targetList) {
-        // Feature: Ranking Board (Sort by Amount)
-        // 1. Check if exists
-        const existingIdx = targetList.findIndex(item => String(item.code) === String(data.code));
-        
-        if (existingIdx !== -1) {
-            // Update usage
-            targetList[existingIdx] = data;
-        } else {
-            // Add new (This is a CHURN event)
-            // Only count as Churn if the list was already full (meaning we are displacing someone)
-            // This prevents the initial page load (0 -> 120 items) from counting as "High Churn"
-            // FIX: Use Set to count UNIQUE new faces only. 
-            // If Rank 29 and Rank 31 swap places 10 times, it counts as 1 churn, not 10.
-            if (targetList.length >= MAX_ITEMS_PER_COLUMN) {
-                currentChurnSet.add(data.code);
-            }
-            targetList.push(data);
-        }
 
-        // 2. Sort by Amount (Descending) to maintain consistent ranking
+// Batch Processor: Runs every X ms to apply updates efficiently
+const startBatchProcessor = () => {
+    if (batchProcessingTimer) clearInterval(batchProcessingTimer);
+    
+    batchProcessingTimer = setInterval(() => {
+        if (messageBuffer.length === 0) return;
+        
+        // Take all items from buffer
+        const batch = messageBuffer.splice(0, messageBuffer.length);
+        processBatch(batch);
+        
+    }, BATCH_INTERVAL);
+};
+
+const stopBatchProcessor = () => {
+    if (batchProcessingTimer) clearInterval(batchProcessingTimer);
+};
+
+const processBatch = (batchItems) => {
+    // Group updates by index to avoid re-sorting multiple times for the same list
+    const updatesByIndex = {
+        HS300: [],
+        ZZ500: [],
+        ZZ1000: [],
+        ZZ2000: []
+    };
+    
+    // 1. Distribute updates
+    batchItems.forEach(data => {
+        data.id = data.code; // Ensure ID for Vue key
+        if (updatesByIndex[data.index_code]) {
+            updatesByIndex[data.index_code].push(data);
+        }
+    });
+    
+    // 2. Process each list ONCE
+    Object.keys(updatesByIndex).forEach(indexCode => {
+        const indexUpdates = updatesByIndex[indexCode];
+        if (indexUpdates.length === 0) return;
+        
+        const targetList = lists[indexCode];
+        if (!targetList) return;
+        
+        indexUpdates.forEach(data => {
+            const existingIdx = targetList.findIndex(item => String(item.code) === String(data.code));
+            
+            if (existingIdx !== -1) {
+                // Update in place
+                targetList[existingIdx] = data;
+            } else {
+                // Add new
+                // Check Churn logic
+                if (targetList.length >= MAX_ITEMS_PER_COLUMN) {
+                    currentChurnSet.add(data.code);
+                }
+                targetList.push(data);
+            }
+        });
+        
+        // 3. Sort ONCE after batch applies
         targetList.sort((a, b) => b.amount - a.amount);
         
-        // 3. Trim excess (Keep Top X)
+        // 4. Trim ONCE after sort
         if (targetList.length > MAX_ITEMS_PER_COLUMN) {
              targetList.splice(MAX_ITEMS_PER_COLUMN);
         }
-    }
+    });
 };
 
 onMounted(() => {
     connectWebSocket();
+    startBatchProcessor();
 });
 
 onUnmounted(() => {
     if (socket) socket.close();
+    stopBatchProcessor();
 });
 </script>
 
