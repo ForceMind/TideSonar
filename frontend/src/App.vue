@@ -32,12 +32,40 @@
           </div>
           
           <!-- Scrollable Body -->
-          <div class="overflow-y-auto p-4 flex-1">
-              <!-- Chart -->
-              <div id="activity-chart" class="w-full h-64 mb-4 shrink-0"></div>
-              
-              <!-- Explanation Section -->
-              <div class="p-4 bg-gray-800/50 rounded text-xs text-gray-400 space-y-2 border border-gray-700">
+	          <div class="overflow-y-auto p-4 flex-1">
+	              <!-- Chart -->
+	              <div id="activity-chart" class="w-full h-64 mb-4 shrink-0"></div>
+
+                  <!-- Polling Profile -->
+                  <div class="p-4 mb-4 bg-gray-800/50 rounded border border-gray-700">
+                      <div class="flex items-center justify-between mb-3">
+                          <p class="text-sm font-semibold text-gray-200">刷新档位</p>
+                          <p class="text-xs text-gray-400" v-if="pollingConfig">当前: {{ profileLabel(pollingConfig.profile) }}</p>
+                      </div>
+
+                      <div class="grid grid-cols-3 gap-2">
+                          <button
+                              v-for="profile in pollingProfiles"
+                              :key="profile.key"
+                              @click="switchPollingProfile(profile.key)"
+                              :disabled="applyingProfile"
+                              class="px-2 py-1.5 text-xs rounded border transition-colors"
+                              :class="pollingConfig && pollingConfig.profile === profile.key ? 'bg-blue-600 text-white border-blue-500' : 'bg-gray-900 text-gray-300 border-gray-700 hover:bg-gray-700'"
+                          >
+                              {{ profileLabel(profile.key) }}
+                          </button>
+                      </div>
+
+                      <p class="mt-3 text-xs text-gray-400 leading-relaxed" v-if="pollingConfig">
+                          热层: 每板块{{ pollingConfig.hot_per_index }}只 / {{ pollingConfig.hot_interval_seconds }}s，
+                          温层: 每板块{{ pollingConfig.warm_per_index }}只 / {{ pollingConfig.warm_interval_seconds }}s，
+                          冷层: {{ pollingConfig.cold_interval_seconds }}s，
+                          上限: {{ pollingConfig.max_requests_per_minute }} req/min
+                      </p>
+                  </div>
+	              
+	              <!-- Explanation Section -->
+	              <div class="p-4 bg-gray-800/50 rounded text-xs text-gray-400 space-y-2 border border-gray-700">
                   <p class="font-bold text-gray-300">🔥 什么是“热度”？</p>
                   <p>
                       热度值代表 <span class="text-blue-400">最近1分钟内新上榜的个股数量</span>。
@@ -146,6 +174,68 @@ const MAX_ITEMS_PER_COLUMN = 30; // Strict Top 30
 
 const wsStatusText = computed(() => isConnected.value ? '已连接' : '已断开');
 const wsStatusClass = computed(() => isConnected.value ? 'text-green-500' : 'text-red-500');
+
+const pollingConfig = ref(null);
+const pollingProfiles = ref([
+    { key: 'conservative' },
+    { key: 'balanced' },
+    { key: 'aggressive' }
+]);
+const applyingProfile = ref(false);
+
+const profileLabelMap = {
+    conservative: '稳健',
+    balanced: '平衡',
+    aggressive: '激进'
+};
+
+const profileLabel = (key) => profileLabelMap[key] || key;
+
+const getApiBase = () => {
+    if (import.meta.env.PROD) return '';
+    return import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+};
+
+const fetchPollingProfiles = async () => {
+    try {
+        const resp = await fetch(`${getApiBase()}/api/runtime/polling-profiles`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        pollingProfiles.value = data.profiles || [];
+    } catch (e) {
+        console.warn('Failed to load polling profiles', e);
+    }
+};
+
+const fetchPollingConfig = async () => {
+    try {
+        const resp = await fetch(`${getApiBase()}/api/runtime/polling-config`);
+        if (!resp.ok) return;
+        pollingConfig.value = await resp.json();
+    } catch (e) {
+        console.warn('Failed to load polling config', e);
+    }
+};
+
+const switchPollingProfile = async (profileKey) => {
+    if (!profileKey || applyingProfile.value) return;
+    try {
+        applyingProfile.value = true;
+        const resp = await fetch(`${getApiBase()}/api/runtime/polling-profile/${profileKey}`, {
+            method: 'POST'
+        });
+        if (!resp.ok) {
+            const errText = await resp.text();
+            console.error('Switch profile failed:', errText);
+            return;
+        }
+        pollingConfig.value = await resp.json();
+    } catch (e) {
+        console.error('Switch profile failed', e);
+    } finally {
+        applyingProfile.value = false;
+    }
+};
 
 // Chart Logic
 const toggleChart = async () => {
@@ -371,6 +461,28 @@ const stopBatchProcessor = () => {
     if (batchProcessingTimer) clearInterval(batchProcessingTimer);
 };
 
+const calculateRankScore = (item) => {
+    if (!item) return 0;
+
+    const amount = Number(item.amount || 0);
+    const pctChg = Number(item.pct_chg || 0);
+    const volumeRatio = Number(item.volume_ratio || 1.0);
+
+    const pctWeight = Number(pollingConfig.value?.pct_weight ?? 0.55);
+    const volumeWeight = Number(pollingConfig.value?.volume_weight ?? 0.18);
+
+    const pctFactor = Math.max(-0.5, Math.min(pctChg / 10.0, 2.0));
+    const volumeFactor = Math.max(0.0, Math.min(volumeRatio - 1.0, 3.0));
+
+    let score = amount * Math.max(0.1, 1.0 + pctWeight * pctFactor + volumeWeight * volumeFactor);
+
+    if (pctChg >= 8.5) score *= 1.6;
+    else if (pctChg >= 5.0) score *= 1.25;
+    else if (pctChg <= -3.0) score *= 0.8;
+
+    return score;
+};
+
 const processBatch = (batchItems) => {
     // Group updates by index to avoid re-sorting multiple times for the same list
     const updatesByIndex = {
@@ -412,8 +524,8 @@ const processBatch = (batchItems) => {
             }
         });
         
-        // 3. Sort ONCE after batch applies
-        targetList.sort((a, b) => b.amount - a.amount);
+        // 3. Sort ONCE after batch applies (weighted: amount + momentum + volume ratio)
+        targetList.sort((a, b) => calculateRankScore(b) - calculateRankScore(a));
         
         // 4. Trim ONCE after sort
         if (targetList.length > MAX_ITEMS_PER_COLUMN) {
@@ -425,6 +537,8 @@ const processBatch = (batchItems) => {
 onMounted(() => {
     connectWebSocket();
     startBatchProcessor();
+    fetchPollingProfiles();
+    fetchPollingConfig();
 });
 
 onUnmounted(() => {

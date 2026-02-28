@@ -3,7 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.app.api import ws
+from backend.app.api import runtime, ws
 from backend.app.services.redis_listener import redis_listener
 from backend.app.services.producer_task import run_mock_producer
 
@@ -54,6 +54,7 @@ app.add_middleware(
 
 # Routes
 app.include_router(ws.router)
+app.include_router(runtime.router)
 
 @app.get("/")
 def read_root():

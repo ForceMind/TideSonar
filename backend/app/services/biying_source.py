@@ -5,6 +5,8 @@ import time
 import logging
 import urllib.parse
 import concurrent.futures
+import threading
+from collections import deque
 from typing import List, Dict, Optional, TypedDict, Any
 from datetime import datetime, date
 from backend.app.models.stock import StockData
@@ -23,6 +25,41 @@ class StockMeta(TypedDict):
     concept: str
     block: str # Deprecated
 
+
+class RollingRateLimiter:
+    """
+    Thread-safe rolling window limiter.
+    Used to guarantee we stay below the provider minute-level cap.
+    """
+
+    def __init__(self, max_calls: int, window_seconds: float):
+        self.max_calls = max(1, int(max_calls))
+        self.window_seconds = max(1.0, float(window_seconds))
+        self._calls = deque()
+        self._lock = threading.Lock()
+
+    def acquire(self) -> None:
+        while True:
+            now = time.monotonic()
+            with self._lock:
+                while self._calls and (now - self._calls[0]) >= self.window_seconds:
+                    self._calls.popleft()
+
+                if len(self._calls) < self.max_calls:
+                    self._calls.append(now)
+                    return
+
+                wait_seconds = self.window_seconds - (now - self._calls[0])
+
+            time.sleep(max(0.01, min(wait_seconds, 0.5)))
+
+    def usage(self) -> int:
+        now = time.monotonic()
+        with self._lock:
+            while self._calls and (now - self._calls[0]) >= self.window_seconds:
+                self._calls.popleft()
+            return len(self._calls)
+
 class BiyingDataSource(BaseDataSource):
     def __init__(self):
         self.license = settings.BIYING_LICENSE
@@ -30,9 +67,22 @@ class BiyingDataSource(BaseDataSource):
             logger.warning("Biying License not set correctly!")
             
         self.session = requests.Session()
+        configured_rpm = int(os.getenv("BIYING_MAX_REQUESTS_PER_MINUTE", "2400"))
+        if configured_rpm > 3000:
+            logger.warning("Configured BIYING_MAX_REQUESTS_PER_MINUTE=%s exceeds provider limit, clamping to 3000.", configured_rpm)
+        self.max_requests_per_minute = max(1, min(configured_rpm, 3000))
+        self._request_limiter = RollingRateLimiter(self.max_requests_per_minute, 60.0)
         
         # Load Universe
         self.stock_index_map: Dict[str, StockMeta] = self._load_or_update_stock_list()
+
+    def update_rate_limit(self, max_requests_per_minute: int) -> int:
+        target = max(1, min(int(max_requests_per_minute), 3000))
+        if target != self.max_requests_per_minute:
+            self.max_requests_per_minute = target
+            self._request_limiter = RollingRateLimiter(self.max_requests_per_minute, 60.0)
+            logger.info("Biying request cap updated to %s req/min", self.max_requests_per_minute)
+        return self.max_requests_per_minute
         
     def _load_or_update_stock_list(self) -> Dict[str, StockMeta]:
         """
@@ -226,14 +276,20 @@ class BiyingDataSource(BaseDataSource):
                 if processed % 500 == 0:
                     logger.info(f"     -> Processed {processed}/{total}...")
                     
+    def get_all_codes(self) -> List[str]:
+        return list(self.stock_index_map.keys())
+
     def get_snapshot(self) -> List[StockData]:
+        return self.get_snapshot_for_codes(self.get_all_codes())
+
+    def get_snapshot_for_codes(self, codes: List[str]) -> List[StockData]:
         """
-        Fetch real-time data using Batch API (High Speed).
+        Fetch real-time data for a subset of stocks using Batch API.
         Documentation: http://api.biyingapi.com/hsrl/ssjy_more/... (Limit 20 per request)
-        Rate Limit: 3000 calls/minute.
+        Provider limit: 3000 calls/minute.
         """
-        all_codes = list(self.stock_index_map.keys())
-        if not all_codes:
+        target_codes = [str(c) for c in codes if c]
+        if not target_codes:
             return []
 
         result = []
@@ -250,7 +306,7 @@ class BiyingDataSource(BaseDataSource):
         MAX_WORKERS = 30 # Reduced workers to avoid burst limits
         
         # Chunk the codes
-        batches = [all_codes[i:i + BATCH_SIZE] for i in range(0, len(all_codes), BATCH_SIZE)]
+        batches = [target_codes[i:i + BATCH_SIZE] for i in range(0, len(target_codes), BATCH_SIZE)]
         
         def fetch_batch(batch_codes):
             if not batch_codes: return []
@@ -259,6 +315,7 @@ class BiyingDataSource(BaseDataSource):
             params = {"stock_codes": codes_str}
             res_items = []
             try:
+                self._request_limiter.acquire()
                 # Reduced timeout to fail fast on slow chunks
                 resp = requests.get(url, params=params, timeout=2.5) 
                 if resp.status_code == 200:
