@@ -120,3 +120,9 @@ If you prefer manual control:
   The script automatically sets up an internal network. You don't need to install Redis on the host.
 - **Updates**:
   Simply run `./deploy.sh` again. It will `git pull` latest code and rebuild containers.
+
+## 5. Runtime Tuning
+
+For polling profiles, runtime rate-limit controls, and weighted ranking details, see:
+
+- [README_RUNTIME.md](README_RUNTIME.md)
