@@ -51,7 +51,24 @@ Built-in profiles:
 
 Selection tiers and final ranking are computed per index (`HS300`, `ZZ500`, `ZZ1000`, `ZZ2000`).
 
-## 4. Runtime APIs
+## 4. Automatic Profile Switching
+
+Automatic switching is enabled by default (`AUTO_PROFILE_SWITCH=true`).
+
+Behavior:
+
+- 09:30-10:00 (trading days): force `aggressive`.
+- After 10:00: switch by market pulse (turnover expansion + strong-up + limit-up counts).
+- When market cools: degrade gradually `aggressive -> balanced -> conservative`.
+- If anomaly returns: switch back up immediately.
+
+Implementation details:
+
+- Decision uses a rolling market snapshot cache (not a single small batch).
+- Snapshot cache entries expire by `SNAPSHOT_CACHE_TTL_SECONDS` (default `90`).
+- Surge mode has a short hold window to avoid profile flapping.
+
+## 5. Runtime APIs
 
 New API routes:
 
@@ -67,7 +84,7 @@ curl http://localhost:8000/api/runtime/polling-config
 curl -X POST http://localhost:8000/api/runtime/polling-profile/aggressive
 ```
 
-## 5. Frontend Profile Switch
+## 6. Frontend Profile Switch
 
 In the Heat modal (`frontend/src/App.vue`), a new profile selector is added:
 
@@ -77,7 +94,7 @@ In the Heat modal (`frontend/src/App.vue`), a new profile selector is added:
 
 The selected profile updates backend polling behavior at runtime (no restart required).
 
-## 6. Weighted Ranking (Backend + Frontend)
+## 7. Weighted Ranking (Backend + Frontend)
 
 Ranking is no longer pure `amount` sorting.
 
@@ -100,16 +117,18 @@ Momentum bonuses:
 
 This pushes strong gainers forward while preserving amount as the base signal.
 
-## 7. Environment Variables
+## 8. Environment Variables
 
 You can override defaults with env vars:
 
 - `POLLING_PROFILE` (`balanced` by default)
+- `AUTO_PROFILE_SWITCH` (`true` by default)
 - `HOT_PER_INDEX`
 - `WARM_PER_INDEX`
 - `HOT_INTERVAL_SECONDS`
 - `WARM_INTERVAL_SECONDS`
 - `COLD_INTERVAL_SECONDS`
+- `SNAPSHOT_CACHE_TTL_SECONDS`
 - `ALERT_TTL_SECONDS`
 - `PRODUCER_LOOP_SLEEP_SECONDS`
 - `BIYING_MAX_REQUESTS_PER_MINUTE`
